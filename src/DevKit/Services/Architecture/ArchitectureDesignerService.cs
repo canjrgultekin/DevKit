@@ -215,35 +215,41 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
 
         return errors;
     }
-
     public string ConvertToManifestJson(ArchitectureDesign design)
     {
-        var projects = design.Components.Where(c => c.Category == "project").ToList();
+        var allProjects = design.Components.Where(c => c.Category == "project").ToList();
+
+        var dotnetTypes = new HashSet<string> { "webapi", "classlib", "worker", "console", "test", "apigateway", "bff" };
+        var jsTypes = new HashSet<string> { "nextjs", "react" };
+
+        var dotnetProjects = allProjects.Where(p => dotnetTypes.Contains(p.Type)).ToList();
+        var jsProjects = allProjects.Where(p => jsTypes.Contains(p.Type)).ToList();
+
         var manifest = new
         {
             solution = design.SolutionName,
             outputPath = design.OutputPath,
             mode = "create",
-            projects = projects.Select(p =>
+            framework = dotnetProjects.Count > 0 ? "dotnet" : (jsProjects.Count > 0 ? "nextjs" : "dotnet"),
+            projects = dotnetProjects.Select(p =>
             {
                 var sdk = p.Config.GetValueOrDefault("sdk", "Microsoft.NET.Sdk");
                 var framework = p.Config.GetValueOrDefault("framework", "net9.0");
 
-                // Bu projenin baglandigi diger projeleri bul (project references)
                 var refs = design.Connections
                     .Where(c => c.SourceId == p.Id && c.Type == "references")
                     .Select(c => design.Components.FirstOrDefault(comp => comp.Id == c.TargetId)?.Name)
                     .Where(n => n != null)
                     .ToList();
 
-                // Bu projenin kullandigi NuGet paketleri (infrastructure baglantilarina gore)
                 var nugets = new List<object>();
-                var infraConnections = design.Connections.Where(c => c.SourceId == p.Id && c.Type == "uses").ToList();
+                var infraConnections = design.Connections
+                    .Where(c => c.SourceId == p.Id && (c.Type == "uses" || c.Type == "publishes-to" || c.Type == "consumes-from"))
+                    .ToList();
                 foreach (var conn in infraConnections)
                 {
                     var target = design.Components.FirstOrDefault(c => c.Id == conn.TargetId);
                     if (target == null) continue;
-
                     nugets.AddRange(GetNugetsForInfra(target.Type));
                 }
 
@@ -251,13 +257,51 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
                 {
                     name = p.Name,
                     path = $"src/{p.Name}",
+                    type = p.Type switch
+                    {
+                        "nextjs" or "react" => p.Type,
+                        "worker" or "console" => "dotnet",
+                        _ => p.Config.GetValueOrDefault("framework", "dotnet") == "nextjs" ? "nextjs" : "dotnet"
+                    },
                     sdk,
                     framework,
                     nugets = nugets.Distinct().ToList(),
                     projectReferences = refs,
                     folders = GetDefaultFolders(p.Type),
                 };
-            }).ToList()
+            }).ToList<object>(),
+            frontends = jsProjects.Select(p =>
+            {
+                var npmDeps = new Dictionary<string, string>();
+                var infraConnections = design.Connections
+                    .Where(c => c.SourceId == p.Id && (c.Type == "uses" || c.Type == "publishes-to" || c.Type == "consumes-from"))
+                    .ToList();
+                foreach (var conn in infraConnections)
+                {
+                    var target = design.Components.FirstOrDefault(c => c.Id == conn.TargetId);
+                    if (target == null) continue;
+                    foreach (var pkg in GetNpmPackagesForInfra(target.Type))
+                        npmDeps.TryAdd(pkg.Key, pkg.Value);
+                }
+
+                return new
+                {
+                    name = p.Name,
+                    path = $"src/{p.Name}",
+                    type = p.Type switch
+                    {
+                        "nextjs" or "react" => p.Type,
+                        "worker" or "console" => "dotnet",
+                        _ => p.Config.GetValueOrDefault("framework", "dotnet") == "nextjs" ? "nextjs" : "dotnet"
+                    },
+                    version = p.Config.GetValueOrDefault("version", p.Type == "nextjs" ? "15" : "19"),
+                    styling = p.Config.GetValueOrDefault("styling", "tailwindcss"),
+                    stateManagement = p.Config.GetValueOrDefault("stateManagement", ""),
+                    apiClient = p.Config.GetValueOrDefault("apiClient", ""),
+                    port = p.Config.GetValueOrDefault("port", "3000"),
+                    npmDependencies = npmDeps,
+                };
+            }).ToList(),
         };
 
         return JsonSerializer.Serialize(manifest, JsonOpts);
@@ -265,7 +309,11 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
 
     public string GenerateDockerCompose(ArchitectureDesign design)
     {
-        var infraComponents = design.Components.Where(c => c.Category == "infrastructure").ToList();
+        var infraComponents = design.Components
+            .Where(c => c.Category == "infrastructure")
+            .Where(c => !c.Config.TryGetValue("hosting", out var h) || h != "existing")
+            .ToList();
+
         if (infraComponents.Count == 0) return "";
 
         var yaml = new System.Text.StringBuilder();
@@ -285,7 +333,6 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
             if (!string.IsNullOrEmpty(port))
                 yaml.AppendLine($"    ports:\n      - \"{port}:{port}\"");
 
-            // Environment variables
             var envVars = GetDockerEnvVars(comp.Type);
             if (envVars.Count > 0)
             {
@@ -294,7 +341,6 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
                     yaml.AppendLine($"      - {env}");
             }
 
-            // Volumes
             var volumes = GetDockerVolumes(comp.Type, serviceName);
             if (volumes.Count > 0)
             {
@@ -303,30 +349,27 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
                     yaml.AppendLine($"      - {vol}");
             }
 
-            // Restart
             yaml.AppendLine("    restart: unless-stopped");
 
-            // Mgmt port (rabbitmq gibi)
             if (comp.Config.TryGetValue("mgmtPort", out var mgmtPort))
             {
-                // ports'a ekle (zaten port satirinda)
                 yaml.Replace($"      - \"{port}:{port}\"", $"      - \"{port}:{port}\"\n      - \"{mgmtPort}:{mgmtPort}\"");
             }
 
             yaml.AppendLine();
         }
 
-        // Volumes tanimla
         yaml.AppendLine("volumes:");
         foreach (var comp in infraComponents)
         {
+            var image = comp.Config.GetValueOrDefault("image", "");
+            if (string.IsNullOrEmpty(image)) continue;
             var serviceName = comp.Name.ToLower().Replace(" ", "-").Replace(".", "-");
             yaml.AppendLine($"  {serviceName}-data:");
         }
 
         return yaml.ToString();
     }
-
     // ═══════════════════════════════════════
     // HELPERS
     // ═══════════════════════════════════════
@@ -385,6 +428,19 @@ public class ArchitectureDesignerService : IArchitectureDesignerService
         {
             "postgresql" or "mssql" or "mongodb" or "redis" or "couchbase" or "elasticsearch" => [$"{serviceName}-data:/var/lib/{type}/data"],
             _ => []
+        };
+    }
+    private static Dictionary<string, string> GetNpmPackagesForInfra(string infraType)
+    {
+        return infraType switch
+        {
+            "postgresql" => new() { ["pg"] = "^8.13.1", ["@types/pg"] = "^8.11.10" },
+            "mongodb" => new() { ["mongoose"] = "^8.9.5" },
+            "redis" => new() { ["ioredis"] = "^5.4.2" },
+            "kafka" => new() { ["kafkajs"] = "^2.2.4" },
+            "rabbitmq" => new() { ["amqplib"] = "^0.10.5", ["@types/amqplib"] = "^0.10.6" },
+            "elasticsearch" => new() { ["@elastic/elasticsearch"] = "^8.17.0" },
+            _ => new()
         };
     }
 }

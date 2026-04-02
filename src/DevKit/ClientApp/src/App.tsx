@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { LayoutDashboard, FolderTree, FileUp, Cloud, Settings, Terminal, GitBranch, Shield, Container, Database, Zap, Package, GitCompareArrows, ScrollText, FolderSync, Boxes } from 'lucide-react'
+import { LayoutDashboard, FolderTree, FileUp, Cloud, Settings, GitBranch, Shield, Container, Database, Zap, Package, GitCompareArrows, ScrollText, FolderSync, Boxes, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import DashboardPage from './pages/DashboardPage'
 import ScaffoldPage from './pages/ScaffoldPage'
 import FileImportPage from './pages/FileImportPage'
@@ -35,19 +36,21 @@ const navItems = [
 ]
 
 export default function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
   return (
     <div className="flex h-screen">
-      <aside className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
-        <div className="p-4 border-b border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center">
-              <Terminal className="w-5 h-5 text-white" />
-            </div>
+      <aside className={`${sidebarOpen ? 'w-64' : 'w-12'} bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-200`}>
+        <div className={`p-4 border-b border-gray-800 flex items-center ${sidebarOpen ? 'gap-3' : 'justify-center'}`}>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-300">
+            {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </button>
+          {sidebarOpen && (
             <div>
               <h1 className="text-lg font-bold text-white">DevKit</h1>
               <p className="text-xs text-gray-500">v2.0.0</p>
             </div>
-          </div>
+          )}
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-auto">
@@ -56,6 +59,7 @@ export default function App() {
               key={to}
               to={to}
               end={to === '/'}
+              title={label}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
@@ -64,15 +68,17 @@ export default function App() {
                 }`
               }
             >
-              <Icon className="w-4.5 h-4.5" />
-              {label}
+              <Icon className="w-4.5 h-4.5 flex-shrink-0" />
+              {sidebarOpen && label}
             </NavLink>
           ))}
         </nav>
 
-        <div className="p-3 border-t border-gray-800">
-          <p className="text-xs text-gray-600 text-center">Developer Toolkit & AI Companion</p>
-        </div>
+        {sidebarOpen && (
+          <div className="p-3 border-t border-gray-800">
+            <p className="text-xs text-gray-600 text-center">Developer Toolkit & AI Companion</p>
+          </div>
+        )}
       </aside>
 
       <main className="flex-1 overflow-auto">
