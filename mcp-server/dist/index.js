@@ -887,6 +887,517 @@ server.registerTool("devkit_azure_env_set", {
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 // ═══════════════════════════════════════════════
+// ARCHITECTURE DESIGNER TOOLS
+// Bu blogu index.ts'te PROJECT MANAGEMENT TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_arch_create", {
+    title: "Create Architecture Design",
+    description: `Yeni bir mimari tasarim olusturur. Solution adi, framework, mimari stili belirtilir.
+"yeni mimari tasarla", "clean architecture proje olustur", "microservice mimarisi tasarla" dediginde CAGIR.`,
+    inputSchema: {
+        name: z.string().min(1).describe("Tasarim adi"),
+        solutionName: z.string().min(1).describe("Solution adi (orn: MyProject)"),
+        outputPath: z.string().min(1).describe("Proje olusturulacak dizin"),
+        framework: z.enum(["dotnet", "nextjs", "nodejs", "python"]).default("dotnet"),
+        architecture: z.enum(["clean", "hexagonal", "ddd", "modular-monolith", "microservices", "simple"]).default("clean"),
+        description: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ name, solutionName, outputPath, framework, architecture, description }) => {
+    const data = await devkitApi("architecturedesigner/create", "POST", {
+        name, solutionName, outputPath, framework, architecture, description,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_add_component", {
+    title: "Add Component to Design",
+    description: `Tasarima yeni bir component ekler: proje (webapi, classlib, worker, test), veritabani (postgresql, mssql, redis), mesajlasma (kafka, rabbitmq), observability (elasticsearch, jaeger, grafana), gateway (apigateway, bff, nginx).
+"Domain class library ekle", "PostgreSQL ekle", "Kafka ekle", "API Gateway ekle" dediginde CAGIR.
+ONEMLI: design objesi her zaman guncel halini gonder.`,
+    inputSchema: {
+        design: z.any().describe("Mevcut ArchitectureDesign objesi (JSON)"),
+        name: z.string().min(1).describe("Component adi (orn: MyProject.Domain)"),
+        type: z.string().min(1).describe("Tip: webapi, classlib, worker, test, postgresql, kafka, redis, elasticsearch, jaeger, grafana, otelcollector, rabbitmq, nginx, apigateway, bff..."),
+        category: z.enum(["project", "infrastructure", "cloud"]).describe("Kategori"),
+        config: z.record(z.string()).optional().describe("Ek config key-value'lar"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ design, name, type, category, config }) => {
+    const data = await devkitApi("architecturedesigner/add-component", "POST", {
+        design, name, type, category, config, x: 0, y: 0,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_add_connection", {
+    title: "Add Connection Between Components",
+    description: `Iki component arasinda baglanti kurar: project reference, uses (db/messaging/cache), depends-on.
+"Api projesini Domain'e bagla", "Api PostgreSQL kullansin", "Worker Kafka'ya baglansin" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("Mevcut ArchitectureDesign objesi"),
+        sourceId: z.string().min(1).describe("Kaynak component ID"),
+        targetId: z.string().min(1).describe("Hedef component ID"),
+        connectionType: z.enum(["references", "uses", "depends-on", "publishes-to", "consumes-from"]).default("uses"),
+        label: z.string().optional().describe("Baglanti etiketi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ design, sourceId, targetId, connectionType, label }) => {
+    const data = await devkitApi("architecturedesigner/add-connection", "POST", {
+        design, sourceId, targetId, connectionType, label,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_remove_component", {
+    title: "Remove Component from Design",
+    description: `Tasarimdan bir component'i ve baglantilerini kaldirir.`,
+    inputSchema: {
+        design: z.any().describe("Mevcut ArchitectureDesign objesi"),
+        componentId: z.string().min(1).describe("Kaldirilacak component ID"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ design, componentId }) => {
+    const data = await devkitApi("architecturedesigner/remove-component", "POST", { design, componentId });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_validate", {
+    title: "Validate Architecture Design",
+    description: `Tasarimi dogrular: eksik alanlar, hatali baglantilar, duplicate isimler kontrol edilir.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ design }) => {
+    const data = await devkitApi("architecturedesigner/validate", "POST", { design });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_to_manifest", {
+    title: "Convert Design to Manifest JSON",
+    description: `Tasarimi DevKit scaffold manifest JSON'ina donusturur. Sonra devkit_scaffold_project ile projeleri olusturabilirsin.
+"tasarimi manifest'e cevir", "scaffold icin hazirla" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ design }) => {
+    const data = await devkitApi("architecturedesigner/to-manifest", "POST", { design });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_to_docker", {
+    title: "Generate Docker Compose from Design",
+    description: `Tasarimdaki infrastructure componentlerinden docker-compose.yml olusturur.
+"docker compose olustur", "altyapi servislerini hazirla" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ design }) => {
+    const data = await devkitApi("architecturedesigner/to-docker", "POST", { design });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_save", {
+    title: "Save Architecture Design",
+    description: `Tasarimi JSON dosyasi olarak diske kaydeder. "tasarimi kaydet" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+        filePath: z.string().min(1).describe("Kayit dosya yolu (orn: C:\\source\\myproject\\architecture.json)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ design, filePath }) => {
+    const data = await devkitApi("architecturedesigner/save", "POST", { design, filePath });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_load", {
+    title: "Load Architecture Design",
+    description: `Kaydedilmis bir tasarimi dosyadan yukler. "tasarimi yukle" dediginde CAGIR.`,
+    inputSchema: {
+        filePath: z.string().min(1).describe("Tasarim dosya yolu"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ filePath }) => {
+    const data = await devkitApi("architecturedesigner/load", "POST", { filePath });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_templates", {
+    title: "Get Component Templates",
+    description: `Kullanilabilir component template'lerini kategorilere gore listeler.
+"hangi componentler var", "template listesi" dediginde CAGIR.`,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("architecturedesigner/templates", "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// PROJECT MANAGEMENT TOOLS (Package + Reference + Diff)
+// Bu blogu index.ts'te MIGRATION TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+// --- NUGET PAKET YONETIMI ---
+server.registerTool("devkit_package_add", {
+    title: "Add NuGet Package",
+    description: `Projeye NuGet paketi ekler. Version belirtilmezse en son surum kurulur.
+"Serilog paketini kur", "MediatR 12.4.1 versiyonunu ekle", "FluentValidation kur" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().min(1).describe("Proje veya csproj yolu"),
+        packageName: z.string().min(1).describe("NuGet paket adi (orn: Serilog, MediatR)"),
+        version: z.string().optional().describe("Spesifik versiyon (bos birakilirsa en son surum)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+}, async ({ projectPath, packageName, version }) => {
+    const data = await devkitApi("projectmanagement/package/add", "POST", { projectPath, packageName, version });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_package_remove", {
+    title: "Remove NuGet Package",
+    description: `Projeden NuGet paketini kaldirir. "Serilog paketini kaldir" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().min(1).describe("Proje veya csproj yolu"),
+        packageName: z.string().min(1).describe("Kaldirilacak NuGet paket adi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ projectPath, packageName }) => {
+    const data = await devkitApi("projectmanagement/package/remove", "POST", { projectPath, packageName });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_package_add_all", {
+    title: "Add Package to All Projects",
+    description: `Solution altindaki tum projelere ayni NuGet paketini ekler.
+"tum projelere Serilog kur" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Solution root dizini (bossa aktif profil workspace)"),
+        packageName: z.string().min(1).describe("NuGet paket adi"),
+        version: z.string().optional().describe("Spesifik versiyon"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+}, async ({ projectPath, packageName, version }) => {
+    const data = await devkitApi("projectmanagement/package/add-all", "POST", {
+        projectPath: projectPath || "", packageName, version,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// --- PROJECT REFERENCE YONETIMI ---
+server.registerTool("devkit_reference_add", {
+    title: "Add Project Reference",
+    description: `Bir projeye baska bir projeyi referans olarak ekler.
+"Api projesine Domain projesini referans ekle" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().min(1).describe("Referans eklenecek proje yolu (orn: src/MyApp.Api)"),
+        referencePath: z.string().min(1).describe("Referans verilecek proje yolu (orn: src/MyApp.Domain)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ projectPath, referencePath }) => {
+    const data = await devkitApi("projectmanagement/reference/add", "POST", { projectPath, referencePath });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_reference_remove", {
+    title: "Remove Project Reference",
+    description: `Projeden bir project reference'i kaldirir.`,
+    inputSchema: {
+        projectPath: z.string().min(1).describe("Referans kaldirilacak proje yolu"),
+        referencePath: z.string().min(1).describe("Kaldirilacak referans proje yolu"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ projectPath, referencePath }) => {
+    const data = await devkitApi("projectmanagement/reference/remove", "POST", { projectPath, referencePath });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_reference_list", {
+    title: "List Project References",
+    description: `Projenin mevcut project reference'larini listeler.
+"referanslari goster", "bu proje hangi projelere bagli" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje yolu (bossa aktif profil workspace)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ projectPath }) => {
+    const data = await devkitApi("projectmanagement/reference/list", "POST", { projectPath: projectPath || "" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// --- GIT DIFF / REVERT ---
+server.registerTool("devkit_diff_files", {
+    title: "List Modified Files",
+    description: `Git'te degismis dosyalari listeler (modified, added, deleted, untracked).
+"degisen dosyalari goster", "neyi degistirdim" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Workspace yolu (bossa aktif profil)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ projectPath }) => {
+    const data = await devkitApi("projectmanagement/diff/files", "POST", { projectPath: projectPath || "" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_diff_compare", {
+    title: "Compare File Versions",
+    description: `Bir dosyanin commit'li (orijinal) hali ile degistirilmis halini karsilastirir.
+Eklenen/silinen satirlari, diff ciktisini ve her iki versiyonun tam icerigini doner.
+"Customer.cs degisikliklerini goster", "dosya farkini karsilastir" dediginde CAGIR.`,
+    inputSchema: {
+        filePath: z.string().min(1).describe("Dosya yolu (relative, orn: src/MyApp/Customer.cs)"),
+        projectPath: z.string().optional().describe("Workspace yolu"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ filePath, projectPath }) => {
+    const data = await devkitApi("projectmanagement/diff/compare", "POST", {
+        projectPath: projectPath || "", filePath,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_diff_revert", {
+    title: "Revert File to Original",
+    description: `Dosyayi son commit'teki haline geri dondurur (degisiklikleri siler).
+"Customer.cs eski haline dondur", "dosyayi revert et" dediginde CAGIR.
+DIKKAT: Degisiklikler kaybolur!`,
+    inputSchema: {
+        filePath: z.string().min(1).describe("Geri dondurolecek dosya yolu"),
+        projectPath: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ filePath, projectPath }) => {
+    const data = await devkitApi("projectmanagement/diff/revert", "POST", {
+        projectPath: projectPath || "", filePath,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_diff_accept", {
+    title: "Accept Modified Version",
+    description: `Dosyanin degistirilmis halini kabul eder (git add). "degisikligi kabul et", "stage et" dediginde CAGIR.`,
+    inputSchema: {
+        filePath: z.string().min(1).describe("Stage edilecek dosya yolu"),
+        projectPath: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ filePath, projectPath }) => {
+    const data = await devkitApi("projectmanagement/diff/accept", "POST", {
+        projectPath: projectPath || "", filePath,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// MIGRATION TOOLS
+// Bu blogu index.ts'te LOG VIEWER TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_migration_status", {
+    title: "Get Migration Status",
+    description: `Migration dosyalarinin durumunu gosterir: hangileri uygulanmis, hangileri bekliyor.
+"migration durumu", "hangi migration'lar uygulanmis" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("PostgreSQL connection string"),
+        projectPath: z.string().optional().describe("Proje root dizini"),
+        migrationsFolder: z.string().optional().describe("Migrations klasor adi (default: migrations)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ connectionString, projectPath, migrationsFolder }) => {
+    const data = await devkitApi("migration/status", "POST", {
+        connectionString, projectPath: projectPath || "", migrationsFolder,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_migration_apply", {
+    title: "Apply Migration",
+    description: `Belirtilen migration dosyasini veritabanina uygular.
+"migration uygula", "V001 migration'i calistir" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("PostgreSQL connection string"),
+        filePath: z.string().min(1).describe("Migration dosya yolu (relative veya absolute)"),
+        projectPath: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ connectionString, filePath, projectPath }) => {
+    const data = await devkitApi("migration/apply", "POST", {
+        connectionString, filePath, projectPath: projectPath || "",
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_migration_rollback", {
+    title: "Rollback Migration",
+    description: `Belirtilen migration'in down dosyasini calistirarak rollback yapar.
+"migration geri al", "V001 rollback" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("PostgreSQL connection string"),
+        filePath: z.string().min(1).describe("Down migration dosya yolu"),
+        projectPath: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ connectionString, filePath, projectPath }) => {
+    const data = await devkitApi("migration/rollback", "POST", {
+        connectionString, filePath, projectPath: projectPath || "",
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_migration_generate", {
+    title: "Generate Migration Files",
+    description: `Yeni migration dosyalari olusturur: V{timestamp}_{name}.up.sql ve .down.sql
+"yeni migration olustur", "add_customer_table migration'i yarat" dediginde CAGIR.`,
+    inputSchema: {
+        name: z.string().min(1).describe("Migration adi (orn: add_customer_email_column)"),
+        projectPath: z.string().optional(),
+        migrationsFolder: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ name, projectPath, migrationsFolder }) => {
+    const data = await devkitApi("migration/generate", "POST", {
+        name, projectPath: projectPath || "", migrationsFolder,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// LOG VIEWER TOOLS
+// Bu blogu index.ts'te ENV COMPARE TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_log_scan_files", {
+    title: "Scan Log Files",
+    description: `Projedeki log dosyalarini tarar ve listeler. logs/ klasoru ve alt projelerdeki log dosyalarini bulur.
+"log dosyalarini bul", "hangi loglar var" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje root dizini (bossa aktif profil workspace)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ projectPath }) => {
+    const data = await devkitApi("logviewer/scan", "POST", { projectPath: projectPath || "" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_log_read", {
+    title: "Read Log File",
+    description: `Log dosyasini okur, parse eder ve filtrelenebilir sekilde doner.
+Level, search text ve correlation ID ile filtrelenebilir.
+"loglari oku", "error loglari goster", "son 500 satir log" dediginde CAGIR.`,
+    inputSchema: {
+        filePath: z.string().min(1).describe("Log dosya yolu (relative veya absolute)"),
+        projectPath: z.string().optional().describe("Proje root dizini"),
+        tail: z.number().default(200).describe("Son kac satir okunacak"),
+        level: z.string().optional().describe("Level filtresi: verbose, debug, information, warning, error, fatal"),
+        search: z.string().optional().describe("Mesaj icinde aranacak text"),
+        correlationId: z.string().optional().describe("Correlation ID filtresi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ filePath, projectPath, tail, level, search, correlationId }) => {
+    const data = await devkitApi("logviewer/read", "POST", {
+        filePath, projectPath: projectPath || "",
+        tail, level, search, correlationId,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// ENV COMPARE TOOLS
+// Bu blogu index.ts'te PACKAGE AUDIT TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_env_compare", {
+    title: "Compare Environment Configs",
+    description: `Projedeki appsettings.json ve .env dosyalarini tarar ve environment'lar arasi karsilastirir.
+Hangi key eksik, hangi deger farkli, hangi config ayni oldugunu gosterir.
+"config'leri karsilastir", "appsettings farklarini goster", "environment diff" dediginde CAGIR.
+projectPath bossa aktif profilin workspace'i kullanilir.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje root dizini (bossa aktif profil workspace)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ projectPath }) => {
+    const data = await devkitApi("envcompare/scan-and-compare", "POST", {
+        projectPath: projectPath || "",
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// PACKAGE AUDIT TOOLS
+// Bu blogu index.ts'te API TEST TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_audit_packages", {
+    title: "Audit Project Packages",
+    description: `Projedeki NuGet/npm/pip dependency'leri tarar: outdated, vulnerable, versiyon bilgileri.
+"paketleri tara", "outdated dependency'leri goster", "guvenlik acigi var mi" dediginde CAGIR.
+projectPath bossa aktif profilin workspace'i kullanilir.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje root dizini (bossa aktif profil workspace)"),
+        framework: z.enum(["dotnet", "nodejs", "python"]).default("dotnet").describe("Framework: dotnet, nodejs, python"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ projectPath, framework }) => {
+    const data = await devkitApi("packageaudit/audit", "POST", {
+        projectPath: projectPath || "",
+        framework,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// API TEST TOOLS
+// Bu blogu index.ts'te DATABASE SCHEMA TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_api_load_swagger", {
+    title: "Load Swagger/OpenAPI",
+    description: `Swagger veya OpenAPI JSON dosyasini yukler ve endpoint listesini doner.
+URL veya dosya yolu verilebilir. "swagger yukle", "API endpointlerini listele" dediginde CAGIR.`,
+    inputSchema: {
+        url: z.string().min(1).describe("Swagger JSON URL (orn: https://localhost:5001/swagger/v1/swagger.json)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+}, async ({ url }) => {
+    const data = await devkitApi("apitest/load-swagger", "POST", { url });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_api_send_request", {
+    title: "Send HTTP Request",
+    description: `Belirtilen URL'e HTTP request gonderir ve response'u doner.
+Method, headers, query params ve body desteklenir. "API'ye request at", "endpoint'i test et" dediginde CAGIR.`,
+    inputSchema: {
+        url: z.string().min(1).describe("Full request URL"),
+        method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).default("GET"),
+        headers: z.record(z.string()).optional().describe("Request headers"),
+        queryParams: z.record(z.string()).optional().describe("Query parameters"),
+        body: z.string().optional().describe("Request body (JSON string)"),
+        contentType: z.string().default("application/json"),
+        timeoutSeconds: z.number().default(30),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+}, async ({ url, method, headers, queryParams, body, contentType, timeoutSeconds }) => {
+    const data = await devkitApi("apitest/send", "POST", {
+        url, method,
+        headers: headers || {},
+        queryParams: queryParams || {},
+        body, contentType, timeoutSeconds,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// DATABASE SCHEMA TOOLS
+// Bu blogu index.ts'te CRYPTO TOOLS'un ustune ekle
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_schema_list_schemas", {
+    title: "List Database Schemas",
+    description: "PostgreSQL veritabanindaki tum schemalari listeler.",
+    inputSchema: {
+        connectionString: z.string().min(1).describe("PostgreSQL connection string"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ connectionString }) => {
+    const data = await devkitApi("schema/schemas", "POST", { connectionString });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_schema_scan", {
+    title: "Scan Database Schema",
+    description: `Veritabanini tarar: tum tablolar, kolonlar, iliskiler (foreign key), row sayilari, boyutlar.
+Mevcut bir projenin veritabani yapisini anlamak icin kullan. "veritabanini tara", "tablolari goster", "schema yapisi" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("PostgreSQL connection string"),
+        schema: z.string().default("public").describe("Schema adi (default: public)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ connectionString, schema }) => {
+    const data = await devkitApi("schema/scan", "POST", { connectionString, schema });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_schema_table_detail", {
+    title: "Get Table Detail",
+    description: `Bir tablonun detayli bilgisini doner: kolonlar, tipler, PK/FK, indexler, constraint'ler, trigger'lar, CREATE script.
+"customers tablosunun yapisini goster", "orders tablosundaki indexler" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("PostgreSQL connection string"),
+        tableName: z.string().min(1).describe("Tablo adi"),
+        schema: z.string().default("public").describe("Schema adi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ connectionString, tableName, schema }) => {
+    const data = await devkitApi("schema/table", "POST", { connectionString, tableName, schema });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
 // CRYPTO TOOLS
 // ═══════════════════════════════════════════════
 server.registerTool("devkit_crypto_decrypt", {

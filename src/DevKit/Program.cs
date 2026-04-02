@@ -1,11 +1,19 @@
 using DevKit.Configuration;
+using DevKit.Services.ApiTest;
+using DevKit.Services.Architecture;
 using DevKit.Services.Azure;
 using DevKit.Services.Crypto;
 using DevKit.Services.Docker;
+using DevKit.Services.EnvCompare;
 using DevKit.Services.FileImport;
 using DevKit.Services.Git;
+using DevKit.Services.LogViewer;
+using DevKit.Services.Migration;
+using DevKit.Services.PackageAudit;
+using DevKit.Services.ProjectManagement;
 using DevKit.Services.Scaffolding;
 using DevKit.Services.Scanning;
+using DevKit.Services.Schema;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +35,15 @@ builder.Services.AddSingleton<IGitService, GitService>();
 builder.Services.AddSingleton<ICryptoService, CryptoService>();
 builder.Services.AddSingleton<IDockerService, DockerService>();
 builder.Services.AddSingleton<IProjectScanService, ProjectScanService>();
+builder.Services.AddSingleton<IDatabaseSchemaService, DatabaseSchemaService>();
+builder.Services.AddSingleton<IApiTestService, ApiTestService>();
+builder.Services.AddSingleton<IPackageAuditService, PackageAuditService>();
+builder.Services.AddSingleton<IEnvCompareService, EnvCompareService>();
+builder.Services.AddSingleton<ILogViewerService, LogViewerService>();
+builder.Services.AddSingleton<IMigrationService, MigrationService>();
+builder.Services.AddSingleton<IProjectManagementService, ProjectManagementService>();
+builder.Services.AddSingleton<IArchitectureDesignerService, ArchitectureDesignerService>();
+
 
 builder.Services.AddCors(options =>
 {
