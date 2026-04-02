@@ -890,141 +890,248 @@ server.registerTool("devkit_azure_env_set", {
 // ARCHITECTURE DESIGNER TOOLS
 // Bu blogu index.ts'te PROJECT MANAGEMENT TOOLS'un ustune ekle
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// ARCHITECTURE DESIGNER TOOLS (v2 - full featured)
+// ═══════════════════════════════════════════════
 server.registerTool("devkit_arch_create", {
     title: "Create Architecture Design",
-    description: `Yeni bir mimari tasarim olusturur. Solution adi, framework, mimari stili belirtilir.
-"yeni mimari tasarla", "clean architecture proje olustur", "microservice mimarisi tasarla" dediginde CAGIR.`,
+    description: `Yeni mimari tasarim olusturur.
+"yeni mimari tasarla", "clean architecture proje", "microservice mimarisi" dediginde CAGIR.`,
     inputSchema: {
-        name: z.string().min(1).describe("Tasarim adi"),
-        solutionName: z.string().min(1).describe("Solution adi (orn: MyProject)"),
-        outputPath: z.string().min(1).describe("Proje olusturulacak dizin"),
+        name: z.string().min(1).describe("Tasarim adi (Design Name)"),
+        solutionName: z.string().min(1).describe("Solution adi (orn: ECommerce)"),
+        outputPath: z.string().min(1).describe("Proje dizini (orn: C:\\source\\ecommerce)"),
         framework: z.enum(["dotnet", "nextjs", "nodejs", "python"]).default("dotnet"),
         architecture: z.enum(["clean", "hexagonal", "ddd", "modular-monolith", "microservices", "simple"]).default("clean"),
         description: z.string().optional(),
     },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
 }, async ({ name, solutionName, outputPath, framework, architecture, description }) => {
-    const data = await devkitApi("architecturedesigner/create", "POST", {
-        name, solutionName, outputPath, framework, architecture, description,
-    });
+    const data = await devkitApi("architecturedesigner/create", "POST", { name, solutionName, outputPath, framework, architecture, description });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 server.registerTool("devkit_arch_add_component", {
     title: "Add Component to Design",
-    description: `Tasarima yeni bir component ekler: proje (webapi, classlib, worker, test), veritabani (postgresql, mssql, redis), mesajlasma (kafka, rabbitmq), observability (elasticsearch, jaeger, grafana), gateway (apigateway, bff, nginx).
-"Domain class library ekle", "PostgreSQL ekle", "Kafka ekle", "API Gateway ekle" dediginde CAGIR.
-ONEMLI: design objesi her zaman guncel halini gonder.`,
-    inputSchema: {
-        design: z.any().describe("Mevcut ArchitectureDesign objesi (JSON)"),
-        name: z.string().min(1).describe("Component adi (orn: MyProject.Domain)"),
-        type: z.string().min(1).describe("Tip: webapi, classlib, worker, test, postgresql, kafka, redis, elasticsearch, jaeger, grafana, otelcollector, rabbitmq, nginx, apigateway, bff..."),
-        category: z.enum(["project", "infrastructure", "cloud"]).describe("Kategori"),
-        config: z.record(z.string()).optional().describe("Ek config key-value'lar"),
-    },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-}, async ({ design, name, type, category, config }) => {
-    const data = await devkitApi("architecturedesigner/add-component", "POST", {
-        design, name, type, category, config, x: 0, y: 0,
-    });
-    return { content: [{ type: "text", text: formatResult(data) }] };
-});
-server.registerTool("devkit_arch_add_connection", {
-    title: "Add Connection Between Components",
-    description: `Iki component arasinda baglanti kurar: project reference, uses (db/messaging/cache), depends-on.
-"Api projesini Domain'e bagla", "Api PostgreSQL kullansin", "Worker Kafka'ya baglansin" dediginde CAGIR.`,
+    description: `Tasarima component ekler. Smart default config'ler otomatik eklenir.
+Proje tipleri: webapi, classlib, worker, console, test, nextjs, react, apigateway, bff
+Infra tipleri: postgresql, mssql, mongodb, redis, couchbase, kafka, rabbitmq, servicebus, elasticsearch, kibana, logstash, jaeger, zipkin, grafana, otelcollector, prometheus, jenkins, nginx
+"Api ekle", "PostgreSQL ekle", "Kafka ekle", "Next.js ekle" dediginde CAGIR.`,
     inputSchema: {
         design: z.any().describe("Mevcut ArchitectureDesign objesi"),
-        sourceId: z.string().min(1).describe("Kaynak component ID"),
-        targetId: z.string().min(1).describe("Hedef component ID"),
-        connectionType: z.enum(["references", "uses", "depends-on", "publishes-to", "consumes-from"]).default("uses"),
-        label: z.string().optional().describe("Baglanti etiketi"),
+        name: z.string().min(1).describe("Component adi"),
+        type: z.string().min(1).describe("Component tipi"),
+        category: z.enum(["project", "infrastructure", "cloud"]),
+        config: z.record(z.string()).optional().describe("Ek config (smart defaults otomatik eklenir)"),
+        hosting: z.enum(["docker", "existing"]).optional().describe("Infra icin: docker veya mevcut servis"),
     },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-}, async ({ design, sourceId, targetId, connectionType, label }) => {
-    const data = await devkitApi("architecturedesigner/add-connection", "POST", {
-        design, sourceId, targetId, connectionType, label,
-    });
+}, async ({ design, name, type, category, config, hosting }) => {
+    const finalConfig = config || {};
+    if (hosting === "existing") {
+        finalConfig.hosting = "existing";
+        delete finalConfig.image;
+    }
+    const data = await devkitApi("architecturedesigner/add-component", "POST", { design, name, type, category, config: finalConfig, x: 0, y: 0 });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 server.registerTool("devkit_arch_remove_component", {
-    title: "Remove Component from Design",
-    description: `Tasarimdan bir component'i ve baglantilerini kaldirir.`,
+    title: "Remove Component",
+    description: `Tasarimdan component ve baglantilerini kaldirir.`,
     inputSchema: {
-        design: z.any().describe("Mevcut ArchitectureDesign objesi"),
+        design: z.any().describe("ArchitectureDesign objesi"),
         componentId: z.string().min(1).describe("Kaldirilacak component ID"),
     },
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
 }, async ({ design, componentId }) => {
     const data = await devkitApi("architecturedesigner/remove-component", "POST", { design, componentId });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
+server.registerTool("devkit_arch_add_connection", {
+    title: "Add Connection",
+    description: `Component'ler arasi baglanti kurar. Dil uyumlulugu otomatik kontrol edilir.
+references: ayni dildeki projeler arasi (dotnet-dotnet veya js-js, CAPRAZ OLMAZ)
+uses: proje → infra/cloud (DB, cache, observability)
+publishes-to: proje → messaging (kafka, rabbitmq, servicebus)
+consumes-from: proje → messaging
+depends-on: genel bagimlili (docker baslama sirasi)
+"Api'yi Domain'e bagla", "Api PostgreSQL kullansin", "Worker Kafka'dan consume etsin" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+        sourceId: z.string().min(1).describe("Kaynak component ID"),
+        targetId: z.string().min(1).describe("Hedef component ID"),
+        connectionType: z.enum(["references", "uses", "publishes-to", "consumes-from", "depends-on"]).default("uses"),
+        label: z.string().optional(),
+    },
+}, async ({ design, sourceId, targetId, connectionType, label }) => {
+    const data = await devkitApi("architecturedesigner/add-connection", "POST", { design, sourceId, targetId, connectionType, label });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_remove_connection", {
+    title: "Remove Connection",
+    description: `Baglanti kaldirir.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+        connectionId: z.string().min(1),
+    },
+}, async ({ design, connectionId }) => {
+    const data = await devkitApi("architecturedesigner/remove-connection", "POST", { design, connectionId });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
 server.registerTool("devkit_arch_validate", {
-    title: "Validate Architecture Design",
-    description: `Tasarimi dogrular: eksik alanlar, hatali baglantilar, duplicate isimler kontrol edilir.`,
+    title: "Validate Design",
+    description: `Tasarimi dogrular: eksik alanlar, duplicate isim, port cakismasi, hatali baglantilar.
+"tasarimi dogrula", "kontrol et" dediginde CAGIR.`,
     inputSchema: {
         design: z.any().describe("ArchitectureDesign objesi"),
     },
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async ({ design }) => {
     const data = await devkitApi("architecturedesigner/validate", "POST", { design });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 server.registerTool("devkit_arch_to_manifest", {
-    title: "Convert Design to Manifest JSON",
-    description: `Tasarimi DevKit scaffold manifest JSON'ina donusturur. Sonra devkit_scaffold_project ile projeleri olusturabilirsin.
-"tasarimi manifest'e cevir", "scaffold icin hazirla" dediginde CAGIR.`,
+    title: "Convert to Manifest",
+    description: `Tasarimi scaffold manifest JSON'a cevirir. .NET projeleri "projects", Next.js/React "frontends" olarak ayrilir.
+"manifest olustur", "scaffold icin hazirla" dediginde CAGIR.`,
     inputSchema: {
         design: z.any().describe("ArchitectureDesign objesi"),
     },
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async ({ design }) => {
     const data = await devkitApi("architecturedesigner/to-manifest", "POST", { design });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
-server.registerTool("devkit_arch_to_docker", {
-    title: "Generate Docker Compose from Design",
-    description: `Tasarimdaki infrastructure componentlerinden docker-compose.yml olusturur.
-"docker compose olustur", "altyapi servislerini hazirla" dediginde CAGIR.`,
+server.registerTool("devkit_arch_scaffold", {
+    title: "Scaffold from Design",
+    description: `Manifest'ten projeleri olusturur. Karma mimarilerde (dotnet+nextjs) her framework ayri scaffold edilir. Otomatik profil olusturulur.
+"projeleri olustur", "scaffold et" dediginde CAGIR.`,
     inputSchema: {
         design: z.any().describe("ArchitectureDesign objesi"),
     },
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ design }) => {
+    // Manifest olustur
+    const manifestRes = await devkitApi("architecturedesigner/to-manifest", "POST", { design });
+    if (!manifestRes.success)
+        return { content: [{ type: "text", text: `Manifest olusturulamadi: ${formatResult(manifestRes)}` }] };
+    const parsed = JSON.parse(manifestRes.manifest);
+    const allProjects = [...(parsed.projects || []), ...(parsed.frontends || [])];
+    const dotnetProjects = allProjects.filter((p) => !["nextjs", "react", "nodejs"].includes(p.type));
+    const nextjsProjects = allProjects.filter((p) => p.type === "nextjs" || p.type === "react");
+    const nodeProjects = allProjects.filter((p) => p.type === "nodejs");
+    const results = [];
+    const doScaffold = async (projects, framework) => {
+        if (!projects || projects.length === 0)
+            return;
+        const res = await devkitApi("scaffolding", "POST", {
+            manifest: { ...parsed, framework, projects, frontends: undefined }, mode: "create",
+        });
+        results.push(`${framework}: ${res.success ? "OK" : res.error || "Hata"}`);
+    };
+    if (dotnetProjects.length > 0)
+        await doScaffold(dotnetProjects, "dotnet");
+    if (nextjsProjects.length > 0)
+        await doScaffold(nextjsProjects, "nextjs");
+    if (nodeProjects.length > 0)
+        await doScaffold(nodeProjects, "nodejs");
+    // Profil olustur
+    try {
+        const profileKey = design.name || design.solutionName || "MyProject";
+        const workspace = design.outputPath.endsWith(design.solutionName)
+            ? design.outputPath : `${design.outputPath}\\${design.solutionName}`;
+        await devkitApi(`profile/${encodeURIComponent(profileKey)}`, "POST", { name: design.solutionName, workspace });
+        await devkitApi(`profile/active/${encodeURIComponent(profileKey)}`, "PUT");
+        results.push("Profil aktif edildi");
+    }
+    catch {
+        results.push("Profil olusturulamadi");
+    }
+    return { content: [{ type: "text", text: results.join(" | ") }] };
+});
+server.registerTool("devkit_arch_to_docker", {
+    title: "Generate Docker Compose",
+    description: `Infrastructure componentlerden docker-compose.yml olusturur. hosting=existing olanlar dahil edilmez.
+"docker compose olustur" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+    },
 }, async ({ design }) => {
     const data = await devkitApi("architecturedesigner/to-docker", "POST", { design });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
-server.registerTool("devkit_arch_save", {
-    title: "Save Architecture Design",
-    description: `Tasarimi JSON dosyasi olarak diske kaydeder. "tasarimi kaydet" dediginde CAGIR.`,
+server.registerTool("devkit_arch_save_docker", {
+    title: "Save Docker Compose to Disk",
+    description: `Docker compose YAML'i diske kaydeder.
+"docker yaml kaydet", "compose dosyasini yaz" dediginde CAGIR.`,
     inputSchema: {
         design: z.any().describe("ArchitectureDesign objesi"),
-        filePath: z.string().min(1).describe("Kayit dosya yolu (orn: C:\\source\\myproject\\architecture.json)"),
+        content: z.string().optional().describe("Ozel YAML icerigi (bossa otomatik olusturulur)"),
     },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ design, content }) => {
+    let yamlContent = content;
+    if (!yamlContent) {
+        const dockerRes = await devkitApi("architecturedesigner/to-docker", "POST", { design });
+        if (!dockerRes.success)
+            return { content: [{ type: "text", text: "Docker compose olusturulamadi." }] };
+        yamlContent = dockerRes.dockerCompose;
+    }
+    const outputPath = design.outputPath.endsWith(design.solutionName)
+        ? design.outputPath : `${design.outputPath}\\${design.solutionName}`;
+    const data = await devkitApi("docker/save", "POST", { outputPath, content: yamlContent });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_save", {
+    title: "Save Architecture Design",
+    description: `Tasarimi JSON dosyasi olarak kaydeder.
+"tasarimi kaydet" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+        filePath: z.string().optional().describe("Dosya yolu (bossa outputPath + solutionName.design.json)"),
+    },
 }, async ({ design, filePath }) => {
-    const data = await devkitApi("architecturedesigner/save", "POST", { design, filePath });
+    const fp = filePath || `${design.outputPath}\\${design.solutionName || "architecture"}.design.json`;
+    const data = await devkitApi("architecturedesigner/save", "POST", { design, filePath: fp });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 server.registerTool("devkit_arch_load", {
     title: "Load Architecture Design",
-    description: `Kaydedilmis bir tasarimi dosyadan yukler. "tasarimi yukle" dediginde CAGIR.`,
+    description: `Kaydedilmis tasarimi dosyadan yukler.
+"tasarimi yukle" dediginde CAGIR.`,
     inputSchema: {
         filePath: z.string().min(1).describe("Tasarim dosya yolu"),
     },
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async ({ filePath }) => {
     const data = await devkitApi("architecturedesigner/load", "POST", { filePath });
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 server.registerTool("devkit_arch_templates", {
-    title: "Get Component Templates",
-    description: `Kullanilabilir component template'lerini kategorilere gore listeler.
+    title: "List Component Templates",
+    description: `Kullanilabilir component template'lerini listeler.
 "hangi componentler var", "template listesi" dediginde CAGIR.`,
     inputSchema: {},
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }, async () => {
     const data = await devkitApi("architecturedesigner/templates", "GET");
     return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_arch_rename_solution", {
+    title: "Rename Solution",
+    description: `Solution adini degistirir ve tum proje component isimlerini gunceller. Output path sifirlanir.
+"solution adini degistir", "projeyi yeniden adlandir" dediginde CAGIR.`,
+    inputSchema: {
+        design: z.any().describe("ArchitectureDesign objesi"),
+        newSolutionName: z.string().min(1).describe("Yeni solution adi"),
+    },
+}, async ({ design, newSolutionName }) => {
+    const updated = {
+        ...design,
+        solutionName: newSolutionName,
+        outputPath: "",
+        components: design.components.map((c) => {
+            if (c.category !== "project")
+                return c;
+            const parts = c.name.split(".");
+            if (parts.length >= 2) {
+                parts[0] = newSolutionName;
+                return { ...c, name: parts.join(".") };
+            }
+            return c;
+        }),
+    };
+    return { content: [{ type: "text", text: `Solution "${newSolutionName}" olarak guncellendi. ${updated.components.length} component yeniden adlandirildi. Output path yeniden girilmeli.\n\n${formatResult(updated)}` }] };
 });
 // ═══════════════════════════════════════════════
 // PROJECT MANAGEMENT TOOLS (Package + Reference + Diff)
