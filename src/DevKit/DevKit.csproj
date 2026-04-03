@@ -10,7 +10,7 @@
 		<PackAsTool>true</PackAsTool>
 		<PackageId>DevKit-Tool</PackageId>
 		<ToolCommandName>devkit</ToolCommandName>
-		<Version>2.0.1</Version>
+		<Version>2.0.2</Version>
 		<Authors>Can Gultekin</Authors>
 		<Description>Developer Toolkit and AI Code Integration Platform. Local dev workflow automation with Claude Desktop MCP integration. Project scaffolding, file import, Git, Docker, Azure deploy, DB schema, API test, and more.</Description>
 		<PackageProjectUrl>https://github.com/canjrgultekin/DevKit</PackageProjectUrl>
