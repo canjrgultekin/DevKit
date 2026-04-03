@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
-import { LayoutDashboard, FolderTree, FileUp, Cloud, Settings, GitBranch, Shield, Container, Database, Zap, Package, GitCompareArrows, ScrollText, FolderSync, Boxes, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { LayoutDashboard, FolderTree, FileUp, Cloud, Settings, GitBranch, Shield, Container, Database, Zap, Package, GitCompareArrows, ScrollText, FolderSync, Boxes, PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react'
 import DashboardPage from './pages/DashboardPage'
 import ScaffoldPage from './pages/ScaffoldPage'
 import FileImportPage from './pages/FileImportPage'
@@ -16,12 +16,14 @@ import EnvComparePage from './pages/EnvComparePage'
 import LogViewerPage from './pages/LogViewerPage'
 import MigrationPage from './pages/MigrationPage'
 import ArchitectureDesignerPage from './pages/ArchitectureDesignerPage'
+import ScanPage from './pages/ScanPage'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/architect', icon: Boxes, label: 'Architect' },
   { to: '/scaffold', icon: FolderTree, label: 'Scaffold' },
   { to: '/import', icon: FileUp, label: 'File Import' },
+  { to: '/scan', icon: Search, label: 'Scanner' },
   { to: '/git', icon: GitBranch, label: 'Git' },
   { to: '/docker', icon: Container, label: 'Docker' },
   { to: '/schema', icon: Database, label: 'Schema' },
@@ -87,6 +89,7 @@ export default function App() {
           <Route path="/architect" element={<ArchitectureDesignerPage />} />
           <Route path="/scaffold" element={<ScaffoldPage />} />
           <Route path="/import" element={<FileImportPage />} />
+          <Route path="/scan" element={<ScanPage />} />
           <Route path="/git" element={<GitPage />} />
           <Route path="/docker" element={<DockerPage />} />
           <Route path="/schema" element={<SchemaPage />} />

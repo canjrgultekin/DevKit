@@ -311,24 +311,26 @@ public sealed class DatabaseSchemaService : IDatabaseSchemaService
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("schema", schema);
 
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using (var reader = await cmd.ExecuteReaderAsync())
         {
-            var table = new TableInfo
+            while (await reader.ReadAsync())
             {
-                Name = reader.GetString(0),
-                Schema = schema,
-                RowEstimate = reader.GetInt64(1),
-                SizeKb = reader.GetInt64(2),
-                ColumnCount = reader.GetInt32(3),
-                IndexCount = reader.GetInt32(4),
-                HasPrimaryKey = reader.GetBoolean(5)
-            };
+                var table = new TableInfo
+                {
+                    Name = reader.GetString(0),
+                    Schema = schema,
+                    RowEstimate = reader.GetInt64(1),
+                    SizeKb = reader.GetInt64(2),
+                    ColumnCount = reader.GetInt32(3),
+                    IndexCount = reader.GetInt32(4),
+                    HasPrimaryKey = reader.GetBoolean(5)
+                };
 
-            tables.Add(table);
-        }
+                tables.Add(table);
+            }
+        } // reader burada kapaniyor
 
-        // Her tablo icin kolonlari da getir (ozet icin)
+        // Artik guvenle yeni sorgular calistirabiliriz
         foreach (var table in tables)
         {
             table.Columns = await GetColumnsAsync(conn, schema, table.Name);

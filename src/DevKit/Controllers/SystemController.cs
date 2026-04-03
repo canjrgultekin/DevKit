@@ -8,6 +8,10 @@ namespace DevKit.Controllers;
 [Route("api/[controller]")]
 public class SystemController : ControllerBase
 {
+    private static string? _lastContext;
+    private static string? _lastContextType;
+    private static DateTime? _lastContextTime;
+
     [HttpPost("browse-folder")]
     public async Task<IActionResult> BrowseFolder([FromBody] BrowseFolderRequest? request)
     {
@@ -250,8 +254,54 @@ $topForm.Dispose()
 
         return process.ExitCode == 0 ? output.Trim() : null;
     }
+
+    [HttpPost("context")]
+    public IActionResult SaveContext([FromBody] SaveContextRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Content))
+            return BadRequest(new { error = "Content is required." });
+
+        _lastContext = request.Content;
+        _lastContextType = request.Type ?? "general";
+        _lastContextTime = DateTime.UtcNow;
+
+        return Ok(new { success = true, type = _lastContextType, sizeKb = Math.Round(request.Content.Length / 1024.0, 1), savedAt = _lastContextTime });
+    }
+
+    [HttpGet("context")]
+    public IActionResult GetContext()
+    {
+        if (string.IsNullOrWhiteSpace(_lastContext))
+            return Ok(new { success = true, hasContext = false });
+
+        return Ok(new
+        {
+            success = true,
+            hasContext = true,
+            type = _lastContextType,
+            content = _lastContext,
+            sizeKb = Math.Round(_lastContext.Length / 1024.0, 1),
+            savedAt = _lastContextTime
+        });
+    }
+
+    [HttpDelete("context")]
+    public IActionResult ClearContext()
+    {
+        _lastContext = null;
+        _lastContextType = null;
+        _lastContextTime = null;
+        return Ok(new { success = true });
+    }
 }
 
+
+// Request model - dosyanin altina ekle veya Models klasorune koy
+public sealed class SaveContextRequest
+{
+    public string Content { get; set; } = string.Empty;
+    public string? Type { get; set; }
+}
 public sealed class BrowseFolderRequest
 {
     public string? InitialPath { get; set; }

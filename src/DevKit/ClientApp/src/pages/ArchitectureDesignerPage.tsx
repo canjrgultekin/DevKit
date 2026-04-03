@@ -6,6 +6,7 @@ import {
   FileJson, Layers, ArrowRight, X, Copy,
   PanelLeftClose, PanelLeftOpen, AlertTriangle, Rocket,
 } from 'lucide-react'
+import OpenInClaude from '../components/OpenInClaude'
 
 const API = '/api/architecturedesigner'
 
@@ -610,6 +611,49 @@ export default function ArchitectureDesignerPage() {
   const getComponentCenter = (comp: ArchComponent) => ({ x: comp.x + (comp.w || 180) / 2, y: comp.y + (comp.h || 52) / 2 })
   const busy = loading !== ''
 
+  function buildArchContext(): string {
+    const parts: string[] = []
+    parts.push('MIMARI TASARIM')
+    parts.push(`Solution: ${design.solutionName}`)
+    parts.push(`Framework: ${design.framework} | Architecture: ${design.architecture}`)
+    parts.push(`Output: ${design.outputPath}`)
+    parts.push('')
+
+    const projects = design.components.filter(c => c.category === 'project')
+    const infra = design.components.filter(c => c.category !== 'project')
+
+    if (projects.length > 0) {
+      parts.push(`PROJELER (${projects.length}):`)
+      projects.forEach(p => {
+        parts.push(`  ${p.name} (${p.type}) port:${p.config.port || '-'}`)
+        const conns = design.connections.filter(c => c.sourceId === p.id)
+        if (conns.length > 0) {
+          conns.forEach(c => {
+            const target = design.components.find(t => t.id === c.targetId)
+            if (target) parts.push(`    → ${c.type}: ${target.name}`)
+          })
+        }
+      })
+      parts.push('')
+    }
+
+    if (infra.length > 0) {
+      parts.push(`ALTYAPI (${infra.length}):`)
+      infra.forEach(i => {
+        const hosting = i.config.hosting === 'existing' ? 'mevcut' : 'docker'
+        parts.push(`  ${i.name} (${i.type}) [${hosting}] port:${i.config.port || '-'}`)
+      })
+      parts.push('')
+    }
+
+    if (generatedManifest) {
+      parts.push('SCAFFOLD MANIFEST:')
+      parts.push(generatedManifest)
+    }
+
+    return parts.join('\n')
+  }
+
   return (
     <div className="flex h-full">
       {/* ═══ LEFT SIDEBAR (collapsible) ═══ */}
@@ -888,8 +932,14 @@ export default function ArchitectureDesignerPage() {
           <button onClick={handleSave} disabled={busy} className="btn-secondary text-xs flex items-center gap-1">
             {loading === 'save' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Kaydet
           </button>
-          <span className="text-gray-700">|</span>
-          <button onClick={handleValidate} disabled={busy} className="btn-secondary text-xs flex items-center gap-1">
+{design.components.length > 0 && (
+  <OpenInClaude
+    contextData={buildArchContext()}
+    contextType="architecture-design"
+    clipboardPrompt={`Bu mimari tasarimi incele: ${design.solutionName}. Projeleri, baglantilari ve altyapiyi anla. Scaffold edilmisse projeye kodlama yapmaya hazirlan, DEVKIT_PATH marker'lari kullan.`}
+  />
+)}
+<span className="text-gray-700">|</span>          <button onClick={handleValidate} disabled={busy} className="btn-secondary text-xs flex items-center gap-1">
             {loading === 'validate' ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
             1. Dogrula
           </button>

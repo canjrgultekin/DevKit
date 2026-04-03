@@ -3,29 +3,12 @@
     "DevKit": {
       "commandName": "Project",
       "applicationUrl": "http://localhost:5199",
-      "workingDirectory": "C:\\Users\\can\\source\\repos\\canjrgultekin\\DevKit",
       "launchBrowser": true,
       "launchUrl": "http://localhost:5199",
-      "jsWebView2Debugging": false,
-      "remoteDebugEnabled": false,
-      "nativeDebugging": false,
-      "hotReloadEnabled": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "http://localhost:5199"
       }
-    },
-    "WSL": {
-      "commandName": "WSL2",
-      "distributionName": "",
-      "applicationUrl": "http://localhost:5199",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "ASPNETCORE_URLS": "http://localhost:5199"
-      }
-    },
-    "Profile 1": {
-      "commandName": "Executable"
     }
   }
 }
