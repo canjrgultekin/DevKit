@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -71,9 +72,16 @@ if (wwwrootPath != null)
 
 app.MapControllers();
 
-// Root sayfasi - explicit GET /
-app.MapGet("/", async context =>
+// SPA fallback: API olmayan tum route'lari index.html'e yonlendir
+app.MapFallback(async context =>
 {
+    // API isteklerini atla (zaten MapControllers'ta yakalanir)
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.StatusCode = 404;
+        return;
+    }
+
     var indexPath = wwwrootPath != null ? Path.Combine(wwwrootPath, "index.html") : null;
     if (indexPath != null && File.Exists(indexPath))
     {
@@ -90,6 +98,8 @@ app.MapGet("/", async context =>
 var profileManager = app.Services.GetRequiredService<ProfileManager>();
 profileManager.EnsureInitialized();
 
+var isToolInstall = Assembly.GetExecutingAssembly().Location.Contains(".dotnet");
+
 Console.WriteLine();
 Console.WriteLine("  ╔══════════════════════════════════════╗");
 Console.WriteLine("  ║           DevKit v2.0.0              ║");
@@ -97,13 +107,15 @@ Console.WriteLine("  ║   Developer Toolkit & AI Companion   ║");
 Console.WriteLine("  ╚══════════════════════════════════════╝");
 Console.WriteLine();
 Console.WriteLine($"  → API: http://localhost:5199");
-Console.WriteLine($"  → UI:  http://localhost:5173");
+if (!isToolInstall) Console.WriteLine($"  → UI:  http://localhost:5173");
 Console.WriteLine($"  → Profile: {profileManager.GetConfigPath()}");
+if (isToolInstall) Console.WriteLine($"  → Mode: Global Tool");
 Console.WriteLine();
 Console.WriteLine("  Press Ctrl+C to stop.");
 Console.WriteLine();
 
-OpenBrowser("http://localhost:5199");
+if (!args.Contains("--no-browser"))
+    OpenBrowser("http://localhost:5199");
 
 app.Run();
 
@@ -111,18 +123,27 @@ app.Run();
 
 static string? FindWwwroot()
 {
-    // 1. csproj dizini (dotnet run)
+    // 1. Assembly dizini (dotnet tool install -g ile kuruldugunda)
+    var assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+    if (assemblyDir != null)
+    {
+        var asmPath = Path.Combine(assemblyDir, "wwwroot");
+        if (Directory.Exists(asmPath) && File.Exists(Path.Combine(asmPath, "index.html")))
+            return Path.GetFullPath(asmPath);
+    }
+
+    // 2. csproj dizini (dotnet run)
     var current = Directory.GetCurrentDirectory();
     var path1 = Path.Combine(current, "wwwroot");
     if (Directory.Exists(path1) && File.Exists(Path.Combine(path1, "index.html")))
         return Path.GetFullPath(path1);
 
-    // 2. bin/Debug/net9.0 altindan (dotnet run bazen buradan calisir)
+    // 3. bin/Debug/net9.0 altindan
     var path2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
     if (Directory.Exists(path2) && File.Exists(Path.Combine(path2, "index.html")))
         return Path.GetFullPath(path2);
 
-    // 3. Ust dizinlerde ara
+    // 4. Ust dizinlerde ara
     var dir = current;
     for (var i = 0; i < 5; i++)
     {
@@ -159,12 +180,14 @@ static string GetFallbackHtml() => """
     <p class="ok">✓ API calisiyor (localhost:5199)</p>
     <p>Developer Toolkit & AI Companion</p>
     <br>
-    <p><strong>UI'yi baslatmak icin:</strong></p>
+    <p><strong>Kurulum:</strong></p>
+    <div class="badge">dotnet tool install -g DevKit</div>
+    <div class="badge">npm i -g devkit-mcp-server</div>
+    <div class="badge">devkit-mcp-server --setup-all</div>
+    <br><br>
+    <p><strong>UI icin:</strong></p>
     <div class="badge">cd src/DevKit/ClientApp && npm run dev</div>
     <p>Sonra <a href="http://localhost:5173">localhost:5173</a> adresini acin</p>
-    <br>
-    <p><strong>MCP Entegrasyonu:</strong></p>
-    <div class="badge">npm i -g devkit-mcp-server && devkit-mcp-server --setup-all</div>
     </div></body></html>
     """;
 

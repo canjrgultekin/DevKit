@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FolderTree, FileUp, Cloud, Settings, Loader2, GitBranch } from 'lucide-react'
+import { FolderTree, FileUp, Cloud, Settings, Loader2, GitBranch, BookOpen, ExternalLink, Search, Boxes, Container, Database } from 'lucide-react'
 import { profileApi } from '../api'
 import type { DevKitProfile } from '../types'
 
@@ -19,18 +19,41 @@ export default function DashboardPage() {
   }, [])
 
   const quickActions = [
-    { icon: FolderTree, label: 'Scaffold Project', desc: 'Create project structure from manifest', path: '/scaffold', color: 'bg-emerald-600' },
-    { icon: FileUp, label: 'Import Files', desc: 'Drag & drop Claude files into project', path: '/import', color: 'bg-violet-600' },
-    { icon: GitBranch, label: 'Git', desc: 'Branch, commit, push, pull, merge', path: '/git', color: 'bg-orange-600' },
-    { icon: Cloud, label: 'Azure Deploy', desc: 'Deploy and manage Azure resources', path: '/azure', color: 'bg-sky-600' },
-    { icon: Settings, label: 'Profiles', desc: 'Manage project configurations', path: '/profile', color: 'bg-amber-600' },
+    { icon: Boxes, label: 'Architecture Designer', desc: 'Gorsel mimari tasarim, scaffold ve docker compose', path: '/architect', color: 'bg-purple-600' },
+    { icon: FolderTree, label: 'Scaffold Project', desc: 'Manifest JSON ile proje iskeleti olustur', path: '/scaffold', color: 'bg-emerald-600' },
+    { icon: FileUp, label: 'Import Files', desc: 'DEVKIT_PATH marker ile dosya aktarimi', path: '/import', color: 'bg-violet-600' },
+    { icon: Search, label: 'Project Scanner', desc: 'Mevcut projeyi tara, yapisini anla', path: '/scan', color: 'bg-teal-600' },
+    { icon: GitBranch, label: 'Git', desc: 'Branch, commit, push, pull, merge, stash', path: '/git', color: 'bg-orange-600' },
+    { icon: Container, label: 'Docker', desc: '11 servis template ile compose yonetimi', path: '/docker', color: 'bg-blue-600' },
+    { icon: Database, label: 'DB Schema', desc: 'PostgreSQL sema tarama ve goruntuleme', path: '/schema', color: 'bg-cyan-600' },
+    { icon: Cloud, label: 'Azure Deploy', desc: 'Build, deploy, env vars, logs', path: '/azure', color: 'bg-sky-600' },
+    { icon: Settings, label: 'Profiles', desc: 'Proje profilleri ve Azure yapilandirmasi', path: '/profile', color: 'bg-amber-600' },
   ]
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">DevKit Dashboard</h1>
-        <p className="text-gray-400">Developer Toolkit & AI Code Integration</p>
+        <p className="text-gray-400">Developer Toolkit & AI Code Integration Platform</p>
+      </div>
+
+      {/* Documentation Card */}
+      <div className="card mb-6 border-brand-600/30 bg-gradient-to-r from-brand-950/20 to-transparent cursor-pointer hover:border-brand-500 transition-all"
+        onClick={() => window.open('/docs.html', '_blank')}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-brand-600/20 rounded-xl flex items-center justify-center">
+              <BookOpen className="w-6 h-6 text-brand-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-white">Kullanim Dokumanlari & MCP Ornekleri</h3>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Tum ozellikler, kurulum rehberi, Claude MCP komut ornekleri ve kullanim akislari
+              </p>
+            </div>
+          </div>
+          <ExternalLink className="w-5 h-5 text-brand-400 flex-shrink-0" />
+        </div>
       </div>
 
       {/* Active Profile Card */}
@@ -82,20 +105,20 @@ export default function DashboardPage() {
 
       {/* Quick Actions */}
       <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Quick Actions</h2>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         {quickActions.map(({ icon: Icon, label, desc, path, color }) => (
           <button
             key={path}
             onClick={() => navigate(path)}
             className="card hover:border-gray-700 transition-all text-left group"
           >
-            <div className="flex items-start gap-4">
-              <div className={`${color} p-3 rounded-lg group-hover:scale-105 transition-transform`}>
-                <Icon className="w-5 h-5 text-white" />
+            <div className="flex items-start gap-3">
+              <div className={`${color} p-2.5 rounded-lg group-hover:scale-105 transition-transform flex-shrink-0`}>
+                <Icon className="w-4.5 h-4.5 text-white" />
               </div>
-              <div>
-                <h3 className="font-semibold text-white">{label}</h3>
-                <p className="text-sm text-gray-500 mt-1">{desc}</p>
+              <div className="min-w-0">
+                <h3 className="font-semibold text-white text-sm">{label}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
               </div>
             </div>
           </button>
