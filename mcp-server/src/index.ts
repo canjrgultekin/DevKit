@@ -1191,19 +1191,15 @@ server.registerTool(
   }
 );
 // ═══════════════════════════════════════════════
-// ARCHITECTURE DESIGNER TOOLS
-// Bu blogu index.ts'te PROJECT MANAGEMENT TOOLS'un ustune ekle
-// ═══════════════════════════════════════════════
-
-// ═══════════════════════════════════════════════
-// ARCHITECTURE DESIGNER TOOLS (v2 - full featured)
+// ARCHITECTURE DESIGNER TOOLS (v3 - designId based)
 // ═══════════════════════════════════════════════
 
 server.registerTool(
   "devkit_arch_create",
   {
     title: "Create Architecture Design",
-    description: `Yeni mimari tasarim olusturur.
+    description: `Yeni mimari tasarim olusturur ve designId doner.
+Sonraki tum islemler bu designId ile yapilir. designId'yi hatirla ve kullan.
 "yeni mimari tasarla", "clean architecture proje", "microservice mimarisi" dediginde CAGIR.`,
     inputSchema: {
       name: z.string().min(1).describe("Tasarim adi (Design Name)"),
@@ -1215,8 +1211,8 @@ server.registerTool(
     },
   },
   async ({ name, solutionName, outputPath, framework, architecture, description }) => {
-    const data = await devkitApi("architecturedesigner/create", "POST", { name, solutionName, outputPath, framework, architecture, description });
-    return { content: [{ type: "text", text: formatResult(data) }] };
+    const data = await devkitApi<{ success: boolean; designId: string }>("architecturedesigner/create", "POST", { name, solutionName, outputPath, framework, architecture, description });
+    return { content: [{ type: "text", text: formatResult(data) + "\n\nONEMLI: Bu designId'yi sonraki tum architecture islemlerinde kullan." }] };
   }
 );
 
@@ -1229,7 +1225,7 @@ Proje tipleri: webapi, classlib, worker, console, test, nextjs, react, apigatewa
 Infra tipleri: postgresql, mssql, mongodb, redis, couchbase, kafka, rabbitmq, servicebus, elasticsearch, kibana, logstash, jaeger, zipkin, grafana, otelcollector, prometheus, jenkins, nginx
 "Api ekle", "PostgreSQL ekle", "Kafka ekle", "Next.js ekle" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("Mevcut ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID (devkit_arch_create'den donen)"),
       name: z.string().min(1).describe("Component adi"),
       type: z.string().min(1).describe("Component tipi"),
       category: z.enum(["project", "infrastructure", "cloud"]),
@@ -1237,13 +1233,13 @@ Infra tipleri: postgresql, mssql, mongodb, redis, couchbase, kafka, rabbitmq, se
       hosting: z.enum(["docker", "existing"]).optional().describe("Infra icin: docker veya mevcut servis"),
     },
   },
-  async ({ design, name, type, category, config, hosting }) => {
+  async ({ designId, name, type, category, config, hosting }) => {
     const finalConfig = config || {};
     if (hosting === "existing") {
       finalConfig.hosting = "existing";
       delete finalConfig.image;
     }
-    const data = await devkitApi("architecturedesigner/add-component", "POST", { design, name, type, category, config: finalConfig, x: 0, y: 0 });
+    const data = await devkitApi("architecturedesigner/add-component", "POST", { designId, name, type, category, config: finalConfig, x: 50 + Math.random() * 400, y: 50 + Math.random() * 300 });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1254,12 +1250,12 @@ server.registerTool(
     title: "Remove Component",
     description: `Tasarimdan component ve baglantilerini kaldirir.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
       componentId: z.string().min(1).describe("Kaldirilacak component ID"),
     },
   },
-  async ({ design, componentId }) => {
-    const data = await devkitApi("architecturedesigner/remove-component", "POST", { design, componentId });
+  async ({ designId, componentId }) => {
+    const data = await devkitApi("architecturedesigner/remove-component", "POST", { designId, componentId });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1276,15 +1272,15 @@ consumes-from: proje → messaging
 depends-on: genel bagimlili (docker baslama sirasi)
 "Api'yi Domain'e bagla", "Api PostgreSQL kullansin", "Worker Kafka'dan consume etsin" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
       sourceId: z.string().min(1).describe("Kaynak component ID"),
       targetId: z.string().min(1).describe("Hedef component ID"),
       connectionType: z.enum(["references", "uses", "publishes-to", "consumes-from", "depends-on"]).default("uses"),
       label: z.string().optional(),
     },
   },
-  async ({ design, sourceId, targetId, connectionType, label }) => {
-    const data = await devkitApi("architecturedesigner/add-connection", "POST", { design, sourceId, targetId, connectionType, label });
+  async ({ designId, sourceId, targetId, connectionType, label }) => {
+    const data = await devkitApi("architecturedesigner/add-connection", "POST", { designId, sourceId, targetId, connectionType, label });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1295,12 +1291,12 @@ server.registerTool(
     title: "Remove Connection",
     description: `Baglanti kaldirir.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
-      connectionId: z.string().min(1),
+      designId: z.string().min(1).describe("Design ID"),
+      connectionId: z.string().min(1).describe("Kaldirilacak connection ID"),
     },
   },
-  async ({ design, connectionId }) => {
-    const data = await devkitApi("architecturedesigner/remove-connection", "POST", { design, connectionId });
+  async ({ designId, connectionId }) => {
+    const data = await devkitApi("architecturedesigner/remove-connection", "POST", { designId, connectionId });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1312,11 +1308,11 @@ server.registerTool(
     description: `Tasarimi dogrular: eksik alanlar, duplicate isim, port cakismasi, hatali baglantilar.
 "tasarimi dogrula", "kontrol et" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
     },
   },
-  async ({ design }) => {
-    const data = await devkitApi("architecturedesigner/validate", "POST", { design });
+  async ({ designId }) => {
+    const data = await devkitApi("architecturedesigner/validate", "POST", { designId });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1328,11 +1324,11 @@ server.registerTool(
     description: `Tasarimi scaffold manifest JSON'a cevirir. .NET projeleri "projects", Next.js/React "frontends" olarak ayrilir.
 "manifest olustur", "scaffold icin hazirla" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
     },
   },
-  async ({ design }) => {
-    const data = await devkitApi("architecturedesigner/to-manifest", "POST", { design });
+  async ({ designId }) => {
+    const data = await devkitApi("architecturedesigner/to-manifest", "POST", { designId });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1344,12 +1340,19 @@ server.registerTool(
     description: `Manifest'ten projeleri olusturur. Karma mimarilerde (dotnet+nextjs) her framework ayri scaffold edilir. Otomatik profil olusturulur.
 "projeleri olustur", "scaffold et" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
     },
   },
-  async ({ design }) => {
+  async ({ designId }) => {
+    // Once design'i store'dan al
+    const storeRes = await devkitApi<{ success: boolean; design: { outputPath: string; solutionName: string; name: string } }>(
+      `architecturedesigner/store/${designId}`, "GET"
+    );
+    if (!storeRes.success) return { content: [{ type: "text", text: "Design bulunamadi. Once devkit_arch_create ile tasarim olusturun." }] };
+    const design = storeRes.design;
+
     // Manifest olustur
-    const manifestRes = await devkitApi<{ success: boolean; manifest: string }>("architecturedesigner/to-manifest", "POST", { design });
+    const manifestRes = await devkitApi<{ success: boolean; manifest: string }>("architecturedesigner/to-manifest", "POST", { designId });
     if (!manifestRes.success) return { content: [{ type: "text", text: `Manifest olusturulamadi: ${formatResult(manifestRes)}` }] };
 
     const parsed = JSON.parse(manifestRes.manifest);
@@ -1392,11 +1395,11 @@ server.registerTool(
     description: `Infrastructure componentlerden docker-compose.yml olusturur. hosting=existing olanlar dahil edilmez.
 "docker compose olustur" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
     },
   },
-  async ({ design }) => {
-    const data = await devkitApi("architecturedesigner/to-docker", "POST", { design });
+  async ({ designId }) => {
+    const data = await devkitApi("architecturedesigner/to-docker", "POST", { designId });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1408,17 +1411,22 @@ server.registerTool(
     description: `Docker compose YAML'i diske kaydeder.
 "docker yaml kaydet", "compose dosyasini yaz" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
       content: z.string().optional().describe("Ozel YAML icerigi (bossa otomatik olusturulur)"),
     },
   },
-  async ({ design, content }) => {
+  async ({ designId, content }) => {
     let yamlContent = content;
     if (!yamlContent) {
-      const dockerRes = await devkitApi<{ success: boolean; dockerCompose: string }>("architecturedesigner/to-docker", "POST", { design });
+      const dockerRes = await devkitApi<{ success: boolean; dockerCompose: string }>("architecturedesigner/to-docker", "POST", { designId });
       if (!dockerRes.success) return { content: [{ type: "text", text: "Docker compose olusturulamadi." }] };
       yamlContent = dockerRes.dockerCompose;
     }
+    const storeRes = await devkitApi<{ success: boolean; design: { outputPath: string; solutionName: string } }>(
+      `architecturedesigner/store/${designId}`, "GET"
+    );
+    if (!storeRes.success) return { content: [{ type: "text", text: "Design bulunamadi." }] };
+    const design = storeRes.design;
     const outputPath = design.outputPath.endsWith(design.solutionName)
       ? design.outputPath : `${design.outputPath}\\${design.solutionName}`;
     const data = await devkitApi("docker/save", "POST", { outputPath, content: yamlContent });
@@ -1433,13 +1441,18 @@ server.registerTool(
     description: `Tasarimi JSON dosyasi olarak kaydeder.
 "tasarimi kaydet" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
       filePath: z.string().optional().describe("Dosya yolu (bossa outputPath + solutionName.design.json)"),
     },
   },
-  async ({ design, filePath }) => {
+  async ({ designId, filePath }) => {
+    const storeRes = await devkitApi<{ success: boolean; design: { outputPath: string; solutionName: string } }>(
+      `architecturedesigner/store/${designId}`, "GET"
+    );
+    if (!storeRes.success) return { content: [{ type: "text", text: "Design bulunamadi." }] };
+    const design = storeRes.design;
     const fp = filePath || `${design.outputPath}\\${design.solutionName || "architecture"}.design.json`;
-    const data = await devkitApi("architecturedesigner/save", "POST", { design, filePath: fp });
+    const data = await devkitApi("architecturedesigner/save", "POST", { designId, filePath: fp });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -1475,17 +1488,53 @@ server.registerTool(
 );
 
 server.registerTool(
+  "devkit_arch_get_design",
+  {
+    title: "Get Current Design",
+    description: `Mevcut tasarimin durumunu gosterir: componentler, baglantilar, config.
+"tasarimi goster", "design durumu" dediginde CAGIR.`,
+    inputSchema: {
+      designId: z.string().min(1).describe("Design ID"),
+    },
+  },
+  async ({ designId }) => {
+    const data = await devkitApi(`architecturedesigner/store/${designId}`, "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_arch_list_designs",
+  {
+    title: "List All Designs",
+    description: `Hafizada kayitli tum tasarimlari listeler. "tasarimlari listele" dediginde CAGIR.`,
+    inputSchema: {},
+  },
+  async () => {
+    const data = await devkitApi("architecturedesigner/store", "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
   "devkit_arch_rename_solution",
   {
     title: "Rename Solution",
     description: `Solution adini degistirir ve tum proje component isimlerini gunceller. Output path sifirlanir.
 "solution adini degistir", "projeyi yeniden adlandir" dediginde CAGIR.`,
     inputSchema: {
-      design: z.any().describe("ArchitectureDesign objesi"),
+      designId: z.string().min(1).describe("Design ID"),
       newSolutionName: z.string().min(1).describe("Yeni solution adi"),
     },
   },
-  async ({ design, newSolutionName }) => {
+  async ({ designId, newSolutionName }) => {
+    // Store'dan design'i al
+    const storeRes = await devkitApi<{ success: boolean; design: { solutionName: string; outputPath: string; components: Array<{ category: string; name: string }> } }>(
+      `architecturedesigner/store/${designId}`, "GET"
+    );
+    if (!storeRes.success) return { content: [{ type: "text", text: "Design bulunamadi." }] };
+
+    const design = storeRes.design;
     const updated = {
       ...design,
       solutionName: newSolutionName,
@@ -1497,7 +1546,107 @@ server.registerTool(
         return c;
       }),
     };
+
+    // Guncellenmis design'i store'a kaydet
+    await devkitApi(`architecturedesigner/store/${designId}`, "POST", updated);
+
     return { content: [{ type: "text", text: `Solution "${newSolutionName}" olarak guncellendi. ${updated.components.length} component yeniden adlandirildi. Output path yeniden girilmeli.\n\n${formatResult(updated)}` }] };
+  }
+);
+
+server.registerTool(
+  "devkit_arch_update_component",
+  {
+    title: "Update Component",
+    description: `Component adini, config degerlerini, hosting modunu gunceller.
+"portu degistir", "hosting'i existing yap", "config ekle", "component adini degistir" dediginde CAGIR.`,
+    inputSchema: {
+      designId: z.string().min(1).describe("Design ID"),
+      componentId: z.string().min(1).describe("Guncellenecek component ID"),
+      name: z.string().optional().describe("Yeni component adi"),
+      setConfig: z.record(z.string()).optional().describe("Eklenecek/guncellenecek config key-value'lar"),
+      removeConfig: z.array(z.string()).optional().describe("Silinecek config key'ler"),
+      hosting: z.enum(["docker", "existing"]).optional().describe("Hosting modu (infra icin)"),
+    },
+  },
+  async ({ designId, componentId, name, setConfig, removeConfig, hosting }) => {
+    const storeRes = await devkitApi<{ success: boolean; design: { components: Array<{ id: string; name: string; config: Record<string, string>; category: string; type: string }> } }>(
+      `architecturedesigner/store/${designId}`, "GET"
+    );
+    if (!storeRes.success) return { content: [{ type: "text", text: "Design bulunamadi." }] };
+
+    const design = storeRes.design;
+    const comp = design.components.find((c: { id: string }) => c.id === componentId);
+    if (!comp) return { content: [{ type: "text", text: `Component '${componentId}' bulunamadi.` }] };
+
+    // Ad guncelle
+    if (name) comp.name = name;
+
+    // Hosting modu
+    if (hosting) {
+      comp.config.hosting = hosting;
+      if (hosting === "existing") {
+        delete comp.config.image;
+        if (!comp.config.host) comp.config.host = "localhost";
+      }
+    }
+
+    // Config ekle/guncelle
+    if (setConfig) {
+      Object.entries(setConfig).forEach(([k, v]) => { comp.config[k] = v; });
+    }
+
+    // Config sil
+    if (removeConfig) {
+      removeConfig.forEach(k => { delete comp.config[k]; });
+    }
+
+    // Store'a kaydet
+    await devkitApi(`architecturedesigner/store/${designId}`, "POST", design);
+
+    const changes: string[] = [];
+    if (name) changes.push(`ad: ${name}`);
+    if (hosting) changes.push(`hosting: ${hosting}`);
+    if (setConfig) changes.push(`config eklendi: ${Object.keys(setConfig).join(", ")}`);
+    if (removeConfig && removeConfig.length > 0) changes.push(`config silindi: ${removeConfig.join(", ")}`);
+
+    return { content: [{ type: "text", text: `Component guncellendi: ${changes.join(" | ")}\n\n${formatResult(comp)}` }] };
+  }
+);
+
+server.registerTool(
+  "devkit_arch_update_metadata",
+  {
+    title: "Update Design Metadata",
+    description: `Tasarimin meta bilgilerini gunceller: ad, aciklama, framework, architecture, outputPath.
+"framework'u nextjs yap", "output path degistir", "architecture'i microservices yap" dediginde CAGIR.`,
+    inputSchema: {
+      designId: z.string().min(1).describe("Design ID"),
+      name: z.string().optional().describe("Yeni design adi"),
+      description: z.string().optional().describe("Yeni aciklama"),
+      framework: z.enum(["dotnet", "nextjs", "nodejs", "python"]).optional(),
+      architecture: z.enum(["clean", "hexagonal", "ddd", "modular-monolith", "microservices", "simple"]).optional(),
+      outputPath: z.string().optional().describe("Yeni output dizini"),
+    },
+  },
+  async ({ designId, name, description, framework, architecture, outputPath }) => {
+    const storeRes = await devkitApi<{ success: boolean; design: Record<string, unknown> }>(
+      `architecturedesigner/store/${designId}`, "GET"
+    );
+    if (!storeRes.success) return { content: [{ type: "text", text: "Design bulunamadi." }] };
+
+    const design = storeRes.design;
+    const changes: string[] = [];
+
+    if (name !== undefined) { design.name = name; changes.push(`name: ${name}`); }
+    if (description !== undefined) { design.description = description; changes.push("description guncellendi"); }
+    if (framework !== undefined) { design.framework = framework; changes.push(`framework: ${framework}`); }
+    if (architecture !== undefined) { design.architecture = architecture; changes.push(`architecture: ${architecture}`); }
+    if (outputPath !== undefined) { design.outputPath = outputPath; changes.push(`outputPath: ${outputPath}`); }
+
+    await devkitApi(`architecturedesigner/store/${designId}`, "POST", design);
+
+    return { content: [{ type: "text", text: `Metadata guncellendi: ${changes.join(" | ")}` }] };
   }
 );
 
