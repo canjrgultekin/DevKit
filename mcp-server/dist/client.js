@@ -6,7 +6,7 @@ export async function devkitApi(endpoint, method = "POST", data) {
             method,
             url: `${DEVKIT_BASE_URL}/api/${endpoint}`,
             data,
-            timeout: 120000,
+            timeout: 300000,
             headers: {
                 "Content-Type": "application/json",
                 Accept: "application/json",

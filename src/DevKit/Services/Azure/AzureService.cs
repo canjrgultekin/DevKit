@@ -168,7 +168,7 @@ public sealed class AzureService : IAzureService
             result.Steps.Add(cleanStep);
 
             // Step 2: Build
-            string publishOutputDir;
+            string? publishOutputDir;
 
             if (deployMode == "custom-script" && !string.IsNullOrWhiteSpace(resource.DeployScript))
             {

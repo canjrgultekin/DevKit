@@ -1,7 +1,7 @@
 {
   "name": "devkit-mcp-server",
-  "version": "1.3.3",
-  "description": "DevKit MCP Server - Bridge AI code generation with real project workflows. Provides Claude Desktop integration for project scaffolding, file import, Git management, Docker Compose, Azure deployment, and credential management.",
+  "version": "1.3.4",
+  "description": "DevKit MCP Server - 140+ tools for full-stack development via Claude Desktop. Project scaffolding, architecture design, Git, Docker, Azure deploy, DB operations (PostgreSQL/MSSQL/Couchbase), Redis, Kafka, build/test/publish, shell execution, file management, code generation, and more.",
   "author": "Can Gultekin",
   "license": "MIT",
   "type": "module",
@@ -27,7 +27,15 @@
     "developer-tools",
     "azure",
     "docker",
-    "git"
+    "git",
+    "postgresql",
+    "redis",
+    "kafka",
+    "couchbase",
+    "architecture",
+    "shell",
+    "build",
+    "deploy"
   ],
   "repository": {
     "type": "git",

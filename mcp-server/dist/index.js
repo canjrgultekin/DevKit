@@ -1264,6 +1264,1009 @@ server.registerTool("devkit_arch_update_metadata", {
     return { content: [{ type: "text", text: `Metadata guncellendi: ${changes.join(" | ")}` }] };
 });
 // ═══════════════════════════════════════════════
+// DATABASE QUERY TOOLS (v2 - PostgreSQL + MSSQL + Couchbase)
+// Mevcut index.ts'teki DATABASE QUERY TOOLS blogunu KOMPLE bununla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_db_query", {
+    title: "Database Query (SELECT)",
+    description: `Veritabaninda SELECT sorgusu calistirir ve sonuclari doner.
+PostgreSQL, MSSQL ve Couchbase (N1QL) destekler.
+"tablodaki verileri goster", "son 10 kaydi getir", "kayit var mi kontrol et" dediginde CAGIR.
+Couchbase icin N1QL kullanin: SELECT * FROM bucket WHERE type = 'user' LIMIT 10`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Connection string. PostgreSQL: Host=...;Database=... | MSSQL: Server=...;Database=... | Couchbase: host=localhost;port=8091;username=admin;password=pass;bucket=default"),
+        sql: z.string().min(1).describe("SQL sorgusu (Couchbase icin N1QL)"),
+        provider: z.enum(["postgresql", "mssql", "couchbase"]).optional().describe("DB provider (otomatik tespit edilir)"),
+        maxRows: z.number().optional().describe("Maksimum satir sayisi (varsayilan 100)"),
+    },
+}, async ({ connectionString, sql, provider, maxRows }) => {
+    const data = await devkitApi("db/query", "POST", { connectionString, sql, provider, maxRows: maxRows || 100 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_db_execute", {
+    title: "Database Execute (DDL/DML)",
+    description: `SQL DDL veya DML calistirir. PostgreSQL, MSSQL ve Couchbase destekler.
+CREATE TABLE, ALTER TABLE, INSERT, UPDATE, DELETE, DROP, TRUNCATE, CREATE INDEX,
+CREATE FUNCTION, CREATE PROCEDURE, CREATE TRIGGER, GRANT, REVOKE.
+Couchbase: CREATE INDEX, CREATE PRIMARY INDEX, INSERT INTO, UPDATE, DELETE FROM, UPSERT.
+"tablo olustur", "kayit ekle", "index olustur", "stored procedure yaz", "kayit sil" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Connection string"),
+        sql: z.string().min(1).describe("DDL/DML SQL ifadesi"),
+        provider: z.enum(["postgresql", "mssql", "couchbase"]).optional(),
+    },
+}, async ({ connectionString, sql, provider }) => {
+    const data = await devkitApi("db/execute", "POST", { connectionString, sql, provider });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_db_batch", {
+    title: "Database Batch Execute",
+    description: `Birden fazla SQL ifadesini sirayla calistirir. Transaction destegi (PostgreSQL/MSSQL).
+"tum tablolari olustur", "migration calistir", "seed data yukle", "schema olustur" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Connection string"),
+        statements: z.array(z.string()).min(1).describe("Sirayla calistirilacak SQL ifadeleri"),
+        provider: z.enum(["postgresql", "mssql", "couchbase"]).optional(),
+        useTransaction: z.boolean().optional().describe("Transaction kullan (varsayilan true, Couchbase'de yok)"),
+        stopOnError: z.boolean().optional().describe("Hatada dur (varsayilan true)"),
+    },
+}, async ({ connectionString, statements, provider, useTransaction, stopOnError }) => {
+    const data = await devkitApi("db/batch", "POST", { connectionString, statements, provider, useTransaction: useTransaction ?? true, stopOnError: stopOnError ?? true });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_db_tables", {
+    title: "List Database Tables",
+    description: `Tablolari/collection'lari listeler. PostgreSQL/MSSQL icin schema bazli, Couchbase icin bucket bazli.
+"tablolari listele", "hangi tablolar var", "collection'lari goster" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Connection string"),
+        provider: z.enum(["postgresql", "mssql", "couchbase"]).optional(),
+        schema: z.string().optional().describe("Schema adi (PostgreSQL: public, MSSQL: dbo, Couchbase: bucket adi)"),
+    },
+}, async ({ connectionString, provider, schema }) => {
+    const data = await devkitApi("db/tables", "POST", { connectionString, provider, schema });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_db_describe", {
+    title: "Describe Table/Collection",
+    description: `Tablo yapisini detayli gosterir: kolonlar, tipler, indexler, PK, nullable, default.
+Couchbase icin INFER komutu ile document yapisini cikarir.
+"tablo yapisini goster", "kolonlari listele", "indexleri goster", "document yapisini incele" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Connection string"),
+        tableName: z.string().min(1).describe("Tablo/collection adi"),
+        provider: z.enum(["postgresql", "mssql", "couchbase"]).optional(),
+        schema: z.string().optional().describe("Schema adi"),
+    },
+}, async ({ connectionString, tableName, provider, schema }) => {
+    const data = await devkitApi("db/describe", "POST", { connectionString, tableName, provider, schema });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// SHELL / TERMINAL TOOLS
+// Mevcut devkit_run ve devkit_search tool'larini SIL, bunlarla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_shell_exec", {
+    title: "Execute Shell Command",
+    description: `cmd, PowerShell veya bash ile herhangi bir komutu calistirir.
+Shell: powershell (Windows varsayilan), bash (Mac varsayilan), cmd, pwsh.
+dotnet build/run/publish/test, npm run/install/build, az webapp deploy, git push,
+pg_dump, redis-cli, docker, kubectl, curl, ssh VE bunlar gibi TUM CLI komutlari calistirilabilir.
+"komutu calistir", "dotnet publish yap", "az webapp deploy", "npm run build" dediginde CAGIR.`,
+    inputSchema: {
+        command: z.string().min(1).describe("Calistirilacak komut"),
+        workingDirectory: z.string().optional().describe("Calisma dizini (bossa aktif profil)"),
+        shell: z.enum(["powershell", "ps", "pwsh", "bash", "sh", "cmd"]).optional().describe("Shell tipi"),
+        timeoutSeconds: z.number().optional().describe("Timeout saniye (varsayilan 120)"),
+        environment: z.record(z.string()).optional().describe("Ortam degiskenleri ({PGPASSWORD: '...', NODE_ENV: 'production'})"),
+        stdin: z.string().optional().describe("Komuta gonderilecek stdin icerigi (orn: yes/no cevabi, username, password). Birden fazla satir icin \\n kullanin."),
+    },
+}, async ({ command, workingDirectory, shell, timeoutSeconds, environment, stdin }) => {
+    let dir = workingDirectory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    const data = await devkitApi("shell/exec", "POST", {
+        command, workingDirectory: dir, shell, timeoutSeconds: timeoutSeconds || 120, environment, stdin,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_shell_steps", {
+    title: "Execute Multi-Step Commands",
+    description: `Birden fazla komutu sirayla calistirir. Her adim farkli dizinde ve farkli shell'de calisabilir.
+Deploy pipeline, build+publish+deploy, migration+seed, test+build+publish gibi cok adimli isler icin.
+Her adim icin ayri workingDirectory ve shell belirtilebilir.
+"once build, sonra publish, sonra deploy yap", "su adimlari sirayla calistir" dediginde CAGIR.`,
+    inputSchema: {
+        steps: z.array(z.object({
+            command: z.string().min(1).describe("Komut"),
+            name: z.string().optional().describe("Adim adi (orn: 'Build API')"),
+            workingDirectory: z.string().optional().describe("Bu adim icin dizin"),
+            shell: z.enum(["powershell", "ps", "pwsh", "bash", "sh", "cmd"]).optional().describe("Bu adim icin shell"),
+            timeoutSeconds: z.number().optional().describe("Bu adim icin timeout"),
+            environment: z.record(z.string()).optional(),
+        })).min(1),
+        shell: z.enum(["powershell", "ps", "pwsh", "bash", "sh", "cmd"]).optional().describe("Varsayilan shell"),
+        workingDirectory: z.string().optional().describe("Varsayilan dizin (bossa aktif profil)"),
+        stopOnError: z.boolean().optional().describe("Hatada dur (varsayilan true)"),
+        timeoutSeconds: z.number().optional().describe("Varsayilan timeout (120sn)"),
+        environment: z.record(z.string()).optional(),
+    },
+}, async ({ steps, shell, workingDirectory, stopOnError, timeoutSeconds, environment }) => {
+    let dir = workingDirectory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    const data = await devkitApi("shell/exec-steps", "POST", {
+        steps, shell, workingDirectory: dir, stopOnError: stopOnError ?? true,
+        timeoutSeconds: timeoutSeconds || 120, environment,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_shell_script", {
+    title: "Create and Run Script",
+    description: `Cok satirli script icerigi alir, dosya olusturur (.ps1/.sh/.bat) ve calistirir.
+Deploy scriptleri, migration scriptleri, build pipeline'lari, setup scriptleri icin ideal.
+Script varsayilan olarak silinir, keepScript=true ile saklanir, saveTo ile belirli dizine kaydedilir.
+"deploy script'i yaz ve calistir", "bu PowerShell scriptini calistir", "build pipeline olustur" dediginde CAGIR.`,
+    inputSchema: {
+        script: z.string().min(1).describe("Script icerigi (cok satirli)"),
+        workingDirectory: z.string().optional().describe("Calisma dizini"),
+        shell: z.enum(["powershell", "ps", "pwsh", "bash", "sh", "cmd"]).optional(),
+        scriptFileName: z.string().optional().describe("Dosya adi (orn: 'deploy.ps1', 'build.sh')"),
+        saveTo: z.string().optional().describe("Script'in kaydedilecegi dizin"),
+        keepScript: z.boolean().optional().describe("Script dosyasini sakla (varsayilan false)"),
+        timeoutSeconds: z.number().optional(),
+        environment: z.record(z.string()).optional(),
+    },
+}, async ({ script, workingDirectory, shell, scriptFileName, saveTo, keepScript, timeoutSeconds, environment }) => {
+    let dir = workingDirectory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    const data = await devkitApi("shell/run-script", "POST", {
+        script, workingDirectory: dir, shell, scriptFileName, saveTo,
+        keepScript: keepScript || false, timeoutSeconds: timeoutSeconds || 120, environment,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_shell_run_file", {
+    title: "Run Existing Script File",
+    description: `Mevcut script dosyasini calistirir: .ps1, .sh, .bat, .cmd, .py, .js.
+Dosya uzantisina gore otomatik dogru shell secer. Arguman gonderilebilir.
+"deploy.ps1 calistir", "build.sh calistir", "setup.bat calistir", "script.py calistir" dediginde CAGIR.`,
+    inputSchema: {
+        filePath: z.string().min(1).describe("Script dosya yolu"),
+        workingDirectory: z.string().optional().describe("Calisma dizini (bossa script'in dizini)"),
+        arguments: z.array(z.string()).optional().describe("Script argumanlari"),
+        timeoutSeconds: z.number().optional(),
+        environment: z.record(z.string()).optional(),
+    },
+}, async ({ filePath, workingDirectory, arguments: args, timeoutSeconds, environment }) => {
+    const data = await devkitApi("shell/run-file", "POST", {
+        filePath, workingDirectory, arguments: args, timeoutSeconds: timeoutSeconds || 120, environment,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_search", {
+    title: "Search in Code (grep)",
+    description: `Proje dosyalarinda metin arar. Dosya adi, satir numarasi ve icerigi doner.
+.cs, .ts, .tsx, .js, .json, .xml, .csproj, .py, .go, .md, .sql, .sh, .ps1 dosyalarinda arar.
+"Customer kelimesini ara", "connection string nerede", "TODO bul", "using Npgsql ara" dediginde CAGIR.`,
+    inputSchema: {
+        pattern: z.string().min(1).describe("Aranacak metin"),
+        directory: z.string().optional().describe("Arama dizini (bossa aktif profil)"),
+        extensions: z.array(z.string()).optional().describe("Dosya uzantilari (orn: ['.cs', '.ts'])"),
+        maxResults: z.number().optional().describe("Maks sonuc (varsayilan 50)"),
+        caseSensitive: z.boolean().optional(),
+    },
+}, async ({ pattern, directory, extensions, maxResults, caseSensitive }) => {
+    let dir = directory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Arama dizini belirtilmedi." }] };
+    const data = await devkitApi("shell/search", "POST", {
+        pattern, directory: dir, extensions, maxResults: maxResults || 50, caseSensitive: caseSensitive || false,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_which", {
+    title: "Find Command Path",
+    description: `Komutun sistemde kurulu olup olmadigini ve yolunu bulur (where/which).
+"dotnet kurulu mu", "az cli var mi", "node nerede" dediginde CAGIR.`,
+    inputSchema: {
+        command: z.string().min(1).describe("Aranacak komut (orn: dotnet, node, az, git, docker)"),
+    },
+}, async ({ command }) => {
+    const data = await devkitApi("shell/which", "POST", { command });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// FILE MANAGEMENT TOOLS (v2 - dedicated controller)
+// Mevcut devkit_file_move ve devkit_file_delete tool'larini SIL, bunlarla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_file_list", {
+    title: "List Directory Contents",
+    description: `Dizin icerigini listeler: dosyalar ve alt dizinler, boyut, tarih bilgileri ile.
+"klasor icerigini goster", "dizindeki dosyalari listele" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().optional().describe("Dizin yolu (bossa aktif profil workspace)"),
+        showHidden: z.boolean().optional().describe("Gizli dosyalari goster"),
+        extensions: z.array(z.string()).optional().describe("Dosya uzantisi filtresi (orn: ['.cs', '.json'])"),
+    },
+}, async ({ path, showHidden, extensions }) => {
+    let dir = path;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Dizin belirtilmedi." }] };
+    const data = await devkitApi("file/list", "POST", { path: dir, showHidden: showHidden || false, extensions });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_tree", {
+    title: "Directory Tree",
+    description: `Dizin agacini recursive gosterir.
+"dizin yapısını goster", "klasor agaci", "proje yapisi" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().optional().describe("Dizin yolu (bossa aktif profil)"),
+        maxDepth: z.number().optional().describe("Maksimum derinlik (varsayilan 3)"),
+    },
+}, async ({ path, maxDepth }) => {
+    let dir = path;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Dizin belirtilmedi." }] };
+    const data = await devkitApi("file/tree", "POST", { path: dir, maxDepth: maxDepth || 3 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_read", {
+    title: "Read File Content",
+    description: `Dosya icerigini okur.
+"dosyayi oku", "icerigi goster", "kodu goster" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().min(1).describe("Dosya yolu"),
+    },
+}, async ({ path }) => {
+    const data = await devkitApi("file/read", "POST", { path });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_write", {
+    title: "Write/Update File",
+    description: `Dosya yazar veya gunceller. Dizin yoksa otomatik olusturur. Append modu destekler.
+"dosya olustur", "dosyaya yaz", "dosyayi guncelle", "icerigi degistir" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().min(1).describe("Dosya yolu"),
+        content: z.string().describe("Dosya icerigi"),
+        append: z.boolean().optional().describe("Sonuna ekle (varsayilan false = ustune yaz)"),
+    },
+}, async ({ path, content, append }) => {
+    const data = await devkitApi("file/write", "POST", { path, content, append: append || false });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_mkdir", {
+    title: "Create Directory",
+    description: `Dizin olusturur (ic ice dizinler dahil).
+"klasor olustur", "dizin yarat" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().min(1).describe("Olusturulacak dizin yolu"),
+    },
+}, async ({ path }) => {
+    const data = await devkitApi("file/mkdir", "POST", { path });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_copy", {
+    title: "Copy File/Directory",
+    description: `Dosya veya dizini kopyalar (recursive).
+"dosyayi kopyala", "klasoru kopyala" dediginde CAGIR.`,
+    inputSchema: {
+        source: z.string().min(1).describe("Kaynak yolu"),
+        destination: z.string().min(1).describe("Hedef yolu"),
+        overwrite: z.boolean().optional().describe("Ustune yaz"),
+    },
+}, async ({ source, destination, overwrite }) => {
+    const data = await devkitApi("file/copy", "POST", { source, destination, overwrite: overwrite || false });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_move", {
+    title: "Move/Rename File or Directory",
+    description: `Dosya veya dizini tasir veya yeniden adlandirir.
+"dosyayi tasi", "klasoru tasi", "dosya adini degistir", "rename" dediginde CAGIR.`,
+    inputSchema: {
+        source: z.string().min(1).describe("Kaynak yolu"),
+        destination: z.string().min(1).describe("Hedef yolu"),
+        overwrite: z.boolean().optional().describe("Ustune yaz"),
+    },
+}, async ({ source, destination, overwrite }) => {
+    const data = await devkitApi("file/move", "POST", { source, destination, overwrite: overwrite || false });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_delete", {
+    title: "Delete File or Directory",
+    description: `Dosya veya dizini siler. Dizinler icin recursive opsiyonu var.
+"dosyayi sil", "klasoru sil", "kaldir" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().min(1).describe("Silinecek dosya/dizin yolu"),
+        recursive: z.boolean().optional().describe("Alt dizinleri de sil (dizinler icin gerekli)"),
+    },
+}, async ({ path, recursive }) => {
+    const data = await devkitApi("file/delete", "POST", { path, recursive: recursive || false });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_info", {
+    title: "File/Directory Info",
+    description: `Dosya veya dizin hakkinda detayli bilgi: boyut, tarih, dosya sayisi.
+"dosya bilgisi", "boyutu ne", "ne zaman degisti" dediginde CAGIR.`,
+    inputSchema: {
+        path: z.string().min(1).describe("Dosya veya dizin yolu"),
+    },
+}, async ({ path }) => {
+    const data = await devkitApi("file/info", "POST", { path });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_find", {
+    title: "Find Files",
+    description: `Dizin icinde dosya arar (pattern ile). Glob pattern destekler.
+"cs dosyalarini bul", "json dosyalarini ara", "Controller dosyalarini bul" dediginde CAGIR.`,
+    inputSchema: {
+        directory: z.string().optional().describe("Arama dizini (bossa aktif profil)"),
+        pattern: z.string().min(1).describe("Dosya pattern (orn: '*.cs', '*Controller*', '*.json')"),
+        maxResults: z.number().optional().describe("Maksimum sonuc (varsayilan 200)"),
+    },
+}, async ({ directory, pattern, maxResults }) => {
+    let dir = directory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Dizin belirtilmedi." }] };
+    const data = await devkitApi("file/find", "POST", { directory: dir, pattern, maxResults: maxResults || 200 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_file_bulk_delete", {
+    title: "Bulk Delete Files",
+    description: `Birden fazla dosya/dizini toplu siler.
+"bu dosyalari sil", "toplu silme" dediginde CAGIR.`,
+    inputSchema: {
+        paths: z.array(z.string()).min(1).describe("Silinecek dosya/dizin yollari"),
+    },
+}, async ({ paths }) => {
+    const data = await devkitApi("file/bulk-delete", "POST", { paths });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// BUILD TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_build", {
+    title: "Build Project",
+    description: `Projeyi build eder (dotnet build veya npm run build). Hatalari ve uyarilari ayiklar.
+"projeyi build et", "derle", "compile et", "hata var mi kontrol et", "build hatalarini goster" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje dizini (bossa aktif profilin workspace'i)"),
+        framework: z.enum(["dotnet", "node"]).optional().describe("Framework (bossa otomatik tespit)"),
+        command: z.string().optional().describe("Ozel build komutu (orn: 'build --configuration Release')"),
+    },
+}, async ({ projectPath, framework, command }) => {
+    let path = projectPath;
+    if (!path) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        path = profileRes?.profile?.workspace;
+    }
+    if (!path)
+        return { content: [{ type: "text", text: "Proje dizini belirtilmedi ve aktif profil yok. projectPath girin veya profil aktif edin." }] };
+    const data = await devkitApi("build", "POST", { projectPath: path, framework, command });
+    if (!data.success && data.error)
+        return { content: [{ type: "text", text: `Build baslatilamadi: ${data.error}` }] };
+    const parts = [];
+    parts.push(data.success ? "BUILD BASARILI" : "BUILD BASARISIZ");
+    parts.push(`Exit code: ${data.exitCode}`);
+    if (data.errorCount && data.errorCount > 0) {
+        parts.push(`\n${data.errorCount} HATA:`);
+        data.errors?.forEach(e => parts.push(`  ${e}`));
+    }
+    if (data.warningCount && data.warningCount > 0) {
+        parts.push(`\n${data.warningCount} UYARI:`);
+        data.warnings?.forEach(w => parts.push(`  ${w}`));
+    }
+    if (!data.success && data.errors && data.errors.length > 0) {
+        parts.push("\nHatalari analiz edip duzeltmemi ister misiniz?");
+    }
+    return { content: [{ type: "text", text: parts.join("\n") }] };
+});
+server.registerTool("devkit_restore", {
+    title: "Restore Dependencies",
+    description: `Paket bagimliklarini yukler (dotnet restore veya npm install).
+"restore yap", "paketleri yukle", "npm install", "dotnet restore" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje dizini (bossa aktif profilin workspace'i)"),
+        framework: z.enum(["dotnet", "node"]).optional().describe("Framework (bossa otomatik tespit)"),
+    },
+}, async ({ projectPath, framework }) => {
+    let path = projectPath;
+    if (!path) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        path = profileRes?.profile?.workspace;
+    }
+    if (!path)
+        return { content: [{ type: "text", text: "Proje dizini belirtilmedi ve aktif profil yok." }] };
+    const data = await devkitApi("build/restore", "POST", { projectPath: path, framework });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// TEST TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_test", {
+    title: "Run Tests",
+    description: `Testleri calistirir ve sonuclari parse eder (dotnet test / npm test).
+Passed, failed, skipped sayilari ve basarisiz test detaylari doner.
+"testleri calistir", "dotnet test", "unit testleri calistir" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje dizini (bossa aktif profil)"),
+        framework: z.enum(["dotnet", "node"]).optional(),
+        filter: z.string().optional().describe("Test filtresi (dotnet: --filter, node: test script adi)"),
+        project: z.string().optional().describe("Belirli test projesi (orn: tests/MyApp.Tests)"),
+    },
+}, async ({ projectPath, framework, filter, project }) => {
+    let path = projectPath;
+    if (!path) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        path = profileRes?.profile?.workspace;
+    }
+    if (!path)
+        return { content: [{ type: "text", text: "Proje dizini belirtilmedi." }] };
+    const data = await devkitApi("test", "POST", { projectPath: path, framework, filter, project });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// PROJECT EXTEND TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_add_dotnet_project", {
+    title: "Add .NET Project to Solution",
+    description: `Mevcut solution'a yeni .NET projesi ekler: classlib, webapi, worker, console, test, grpc, blazor.
+Otomatik olarak solution'a ekler, referanslari kurar, NuGet paketlerini yukler.
+"yeni classlib ekle", "worker service ekle", "test projesi ekle", "yeni API projesi ekle" dediginde CAGIR.`,
+    inputSchema: {
+        solutionPath: z.string().min(1).describe("Solution dizini veya .sln dosya yolu"),
+        projectName: z.string().min(1).describe("Proje adi (orn: MyApp.NewLayer)"),
+        projectType: z.enum(["classlib", "webapi", "worker", "console", "test", "xunit", "nunit", "grpc", "blazor"]).default("classlib"),
+        framework: z.string().optional().describe("Framework (varsayilan net9.0)"),
+        subDirectory: z.string().optional().describe("Alt dizin (varsayilan src)"),
+        references: z.array(z.string()).optional().describe("Referans eklenecek proje adlari (orn: ['MyApp.Domain', 'MyApp.Application'])"),
+        packages: z.array(z.string()).optional().describe("NuGet paketleri (orn: ['MediatR', 'Serilog'])"),
+        folders: z.array(z.string()).optional().describe("Olusturulacak klasorler (orn: ['Services', 'Models', 'Interfaces'])"),
+    },
+}, async ({ solutionPath, projectName, projectType, framework, subDirectory, references, packages, folders }) => {
+    const data = await devkitApi("codegen/add-project", "POST", { solutionPath, projectName, projectType, framework, subDirectory, references, packages, folders });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_add_frontend_project", {
+    title: "Add Frontend Project",
+    description: `Mevcut projeye Next.js, React/Vite veya Node.js projesi ekler.
+"Next.js frontend ekle", "React projesi olustur", "Node.js API ekle" dediginde CAGIR.`,
+    inputSchema: {
+        parentPath: z.string().min(1).describe("Ust dizin (projenin root'u)"),
+        projectName: z.string().min(1).describe("Proje adi"),
+        projectType: z.enum(["nextjs", "react", "vite", "nodejs", "express"]).default("nextjs"),
+        packages: z.array(z.string()).optional().describe("Ek npm paketleri"),
+    },
+}, async ({ parentPath, projectName, projectType, packages }) => {
+    const data = await devkitApi("codegen/add-frontend", "POST", { parentPath, projectName, projectType, packages });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// CODE GENERATION TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_codegen", {
+    title: "Generate Boilerplate Code",
+    description: `Entity, Repository, Service, Controller, DTO boilerplate kodu uretir.
+Template tipleri: entity, repository, service, controller, dto, full (hepsini olusturur).
+"Customer entity olustur", "Order icin full CRUD kodlari uret", "DTO'lari olustur" dediginde CAGIR.`,
+    inputSchema: {
+        template: z.enum(["entity", "repository", "service", "controller", "dto", "full"]).describe("Kod sablonu"),
+        name: z.string().min(1).describe("Entity/model adi (orn: Customer, Order, Product)"),
+        namespace: z.string().optional().describe("Namespace (orn: MyApp)"),
+        properties: z.record(z.string()).optional().describe("Propertyler: { 'Name': 'string', 'Email': 'string', 'Age': 'int' }"),
+    },
+}, async ({ template, name, namespace: ns, properties }) => {
+    const data = await devkitApi("codegen/generate", "POST", { template, name, namespace: ns, properties });
+    if (data.success && data.files) {
+        const summary = data.files.map((f) => `  ${f.path}`).join("\n");
+        return { content: [{ type: "text", text: `${data.files.length} dosya uretildi:\n${summary}\n\nDosyalari projeye yazmak icin devkit_import_file kullanin.` }] };
+    }
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_codegen_write", {
+    title: "Generate and Write Boilerplate",
+    description: `Boilerplate kod uretir VE dosyalari direkt projeye yazar. devkit_codegen + devkit_import_file birlesimidir.
+"Customer icin full CRUD yaz ve import et" dediginde CAGIR.`,
+    inputSchema: {
+        template: z.enum(["entity", "repository", "service", "controller", "dto", "full"]),
+        name: z.string().min(1).describe("Entity adi"),
+        namespace: z.string().optional(),
+        properties: z.record(z.string()).optional(),
+        basePath: z.string().optional().describe("Proje root dizini (bossa aktif profil)"),
+    },
+}, async ({ template, name, namespace: ns, properties, basePath }) => {
+    let path = basePath;
+    if (!path) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        path = profileRes?.profile?.workspace;
+    }
+    if (!path)
+        return { content: [{ type: "text", text: "Proje dizini belirtilmedi." }] };
+    const genRes = await devkitApi("codegen/generate", "POST", { template, name, namespace: ns, properties });
+    if (!genRes.success || !genRes.files)
+        return { content: [{ type: "text", text: formatResult(genRes) }] };
+    const results = [];
+    for (const file of genRes.files) {
+        const fullPath = `${path}\\${file.path.replace(/\//g, "\\")}`;
+        const importRes = await devkitApi("fileimport", "POST", { filePath: fullPath, content: file.content });
+        results.push(`${importRes.success ? "OK" : "HATA"}: ${file.path}`);
+    }
+    return { content: [{ type: "text", text: `${genRes.files.length} dosya yazildi:\n${results.join("\n")}` }] };
+});
+// ═══════════════════════════════════════════════
+// EF CORE MIGRATION TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_ef_migration", {
+    title: "EF Core Migration",
+    description: `Entity Framework Core migration islemleri: add, update, remove, list, script.
+"migration ekle", "database guncelle", "migration listele", "migration scripti olustur" dediginde CAGIR.`,
+    inputSchema: {
+        solutionPath: z.string().optional().describe("Solution dizini (bossa aktif profil)"),
+        action: z.enum(["add", "update", "remove", "list", "script"]),
+        migrationName: z.string().optional().describe("Migration adi (add icin gerekli)"),
+        infrastructureProject: z.string().optional().describe("DbContext projesi (varsayilan src/Infrastructure)"),
+        startupProject: z.string().optional().describe("Startup projesi (varsayilan src/Api)"),
+    },
+}, async ({ solutionPath, action, migrationName, infrastructureProject, startupProject }) => {
+    let path = solutionPath;
+    if (!path) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        path = profileRes?.profile?.workspace;
+    }
+    if (!path)
+        return { content: [{ type: "text", text: "Solution dizini belirtilmedi." }] };
+    const data = await devkitApi("codegen/ef-migration", "POST", { solutionPath: path, action, migrationName, infrastructureProject, startupProject });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// CODE FORMAT TOOL
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_format", {
+    title: "Format Code",
+    description: `Kodu formatlar (dotnet format / prettier).
+"kodu formatla", "prettier calistir", "dotnet format" dediginde CAGIR.`,
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje dizini (bossa aktif profil)"),
+        framework: z.enum(["dotnet", "node"]).optional(),
+    },
+}, async ({ projectPath, framework }) => {
+    let path = projectPath;
+    if (!path) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        path = profileRes?.profile?.workspace;
+    }
+    if (!path)
+        return { content: [{ type: "text", text: "Proje dizini belirtilmedi." }] };
+    const data = await devkitApi("codegen/format", "POST", { projectPath: path, framework });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// GITHUB CLI TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_github_repo", {
+    title: "GitHub Repository Operations",
+    description: `GitHub repo olusturur veya bilgi alir (gh CLI gerekir).
+"GitHub repo olustur", "repo bilgilerini goster" dediginde CAGIR.`,
+    inputSchema: {
+        action: z.enum(["create", "view", "list"]),
+        name: z.string().optional().describe("Repo adi (create icin)"),
+        visibility: z.enum(["public", "private"]).optional().default("private"),
+        workingDirectory: z.string().optional(),
+    },
+}, async ({ action, name, visibility, workingDirectory }) => {
+    let dir = workingDirectory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Dizin belirtilmedi." }] };
+    let command;
+    switch (action) {
+        case "create":
+            command = `gh repo create ${name || "my-repo"} --${visibility || "private"} --source . --push`;
+            break;
+        case "view":
+            command = "gh repo view";
+            break;
+        case "list":
+            command = "gh repo list --limit 20";
+            break;
+        default: return { content: [{ type: "text", text: "Gecersiz action." }] };
+    }
+    const data = await devkitApi("run", "POST", { command, workingDirectory: dir, timeoutSeconds: 30 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_github_pr", {
+    title: "GitHub PR Operations",
+    description: `Pull Request olusturur, listeler veya goruntulur.
+"PR olustur", "PR listele", "PR goruntule" dediginde CAGIR.`,
+    inputSchema: {
+        action: z.enum(["create", "list", "view", "merge"]),
+        title: z.string().optional().describe("PR basligi (create icin)"),
+        body: z.string().optional().describe("PR aciklamasi"),
+        base: z.string().optional().describe("Hedef branch (varsayilan main)"),
+        prNumber: z.number().optional().describe("PR numarasi (view/merge icin)"),
+        workingDirectory: z.string().optional(),
+    },
+}, async ({ action, title, body, base, prNumber, workingDirectory }) => {
+    let dir = workingDirectory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Dizin belirtilmedi." }] };
+    let command;
+    switch (action) {
+        case "create":
+            command = `gh pr create --title "${title || "New PR"}" --body "${body || ""}" --base ${base || "main"}`;
+            break;
+        case "list":
+            command = "gh pr list";
+            break;
+        case "view":
+            command = `gh pr view ${prNumber || ""}`;
+            break;
+        case "merge":
+            command = `gh pr merge ${prNumber || ""} --merge`;
+            break;
+        default: return { content: [{ type: "text", text: "Gecersiz action." }] };
+    }
+    const data = await devkitApi("run", "POST", { command, workingDirectory: dir, timeoutSeconds: 30 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// HEALTH CHECK (shell uzerinden)
+// Mevcut devkit_health_check'i bununla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_health_check", {
+    title: "HTTP Health Check",
+    description: `HTTP endpoint'e istek gonderir ve durumunu kontrol eder.
+"API ayakta mi", "health check", "endpoint test et", "servisi kontrol et" dediginde CAGIR.`,
+    inputSchema: {
+        url: z.string().min(1).describe("URL (orn: http://localhost:5001/health)"),
+        method: z.enum(["GET", "POST", "HEAD"]).optional().default("GET"),
+        timeoutSeconds: z.number().optional().default(10),
+    },
+}, async ({ url, method, timeoutSeconds }) => {
+    const curlCmd = `curl -s -o /dev/null -w "%{http_code} %{time_total}s" -X ${method || "GET"} "${url}" --max-time ${timeoutSeconds || 10}`;
+    const data = await devkitApi("shell/exec", "POST", { command: curlCmd, shell: "cmd", timeoutSeconds: (timeoutSeconds || 10) + 5 });
+    if (data.success && data.stdout) {
+        const parts = data.stdout.trim().split(" ");
+        const statusCode = parseInt(parts[0]) || 0;
+        const responseTime = parts[1] || "?";
+        const healthy = statusCode >= 200 && statusCode < 400;
+        return { content: [{ type: "text", text: `${healthy ? "HEALTHY" : "UNHEALTHY"} | Status: ${statusCode} | Response: ${responseTime} | URL: ${url}` }] };
+    }
+    return { content: [{ type: "text", text: `UNREACHABLE | URL: ${url} | Error: ${data.error || data.stderr || "Baglanti kurulamadi"}` }] };
+});
+// ═══════════════════════════════════════════════
+// PACKAGE SEARCH (shell uzerinden)
+// Mevcut devkit_package_search'i bununla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_package_search", {
+    title: "Search NuGet/npm Packages",
+    description: `NuGet veya npm paket arar.
+"MediatR paketini ara", "npm'de tailwind ara", "Serilog NuGet'te var mi" dediginde CAGIR.`,
+    inputSchema: {
+        query: z.string().min(1).describe("Paket adi"),
+        source: z.enum(["nuget", "npm"]).default("nuget"),
+        take: z.number().optional().describe("Sonuc sayisi (varsayilan 10)"),
+    },
+}, async ({ query, source, take }) => {
+    const command = source === "nuget"
+        ? `dotnet package search "${query}" --take ${take || 10}`
+        : `npm search "${query}" --long --limit=${take || 10}`;
+    const data = await devkitApi("shell/exec", "POST", { command, shell: "cmd", timeoutSeconds: 30 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// BROWSER OPEN
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_browser_open", {
+    title: "Open URL in Browser",
+    description: `Kullanicinin varsayilan tarayicisinda URL acar.
+az login sonrasi donen URL, OAuth callback, web uygulamasi test vb. icin kullanilir.
+"bu linki ac", "tarayicida ac", "URL'yi browser'da goster" dediginde CAGIR.`,
+    inputSchema: {
+        url: z.string().min(1).describe("Acilacak URL"),
+    },
+}, async ({ url }) => {
+    const data = await devkitApi("browser/open", "POST", { url });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// PROCESS INTERACTIVE INPUT
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_process_input", {
+    title: "Send Input to Running Process",
+    description: `Arka planda calisan bir process'e stdin uzerinden input gonderir.
+Interaktif komutlar icin: username/password prompt, yes/no cevabi, az login kodu vb.
+Once devkit_process_start ile process baslatin, sonra bu tool ile input gonderin.
+"process'e yes yaz", "username gonder", "sifre gir" dediginde CAGIR.`,
+    inputSchema: {
+        processId: z.string().min(1).describe("Process ID"),
+        input: z.string().min(1).describe("Gonderilecek input (orn: 'yes', username, password)"),
+        waitMs: z.number().optional().describe("Input sonrasi bekleme ms (varsayilan 500)"),
+    },
+}, async ({ processId, input, waitMs }) => {
+    const data = await devkitApi(`process/input/${processId}`, "POST", { input, waitMs: waitMs || 500 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// REDIS TOOLS (v2 - dedicated controller)
+// Mevcut index.ts'teki devkit_redis ve devkit_redis_scan'i SIL, bunlarla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_redis", {
+    title: "Redis Execute Command",
+    description: `Redis'e herhangi bir komut gonderir: GET, SET, DEL, HGETALL, LPUSH, LRANGE, TTL, EXPIRE, FLUSHDB, INFO vb.
+"Redis'te SET yap", "cache'e yaz", "Redis komutu calistir" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional().describe("Redis connection (varsayilan localhost:6379). Ornek: 'localhost:6379,password=mypass'"),
+        command: z.string().min(1).describe("Redis komutu (orn: 'SET mykey myvalue EX 3600', 'GET mykey', 'KEYS user:*')"),
+        database: z.number().optional().describe("Redis DB numarasi (varsayilan 0)"),
+    },
+}, async ({ connectionString, command, database }) => {
+    const data = await devkitApi("redis/execute", "POST", { connectionString: connectionString || "localhost:6379", command, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_redis_get", {
+    title: "Redis Get Value",
+    description: `Redis key'in degerini, tipini ve TTL'ini gosterir. String, Hash, List, Set, SortedSet tiplerini otomatik algilar.
+"Redis'ten oku", "cache degerini getir", "key'in degerini goster" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional(),
+        key: z.string().min(1).describe("Redis key"),
+        database: z.number().optional(),
+    },
+}, async ({ connectionString, key, database }) => {
+    const data = await devkitApi("redis/get", "POST", { connectionString: connectionString || "localhost:6379", key, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_redis_set", {
+    title: "Redis Set Value",
+    description: `Redis'e key-value yazar, opsiyonel TTL ile.
+"Redis'e yaz", "cache'e kaydet", "key olustur" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional(),
+        key: z.string().min(1).describe("Redis key"),
+        value: z.string().min(1).describe("Deger"),
+        expireSeconds: z.number().optional().describe("TTL saniye (0 = surezi)"),
+        database: z.number().optional(),
+    },
+}, async ({ connectionString, key, value, expireSeconds, database }) => {
+    const data = await devkitApi("redis/set", "POST", { connectionString: connectionString || "localhost:6379", key, value, expireSeconds: expireSeconds || 0, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_redis_delete", {
+    title: "Redis Delete Key",
+    description: `Redis key'i siler. "key'i sil", "cache temizle" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional(),
+        key: z.string().min(1).describe("Silinecek key"),
+        database: z.number().optional(),
+    },
+}, async ({ connectionString, key, database }) => {
+    const data = await devkitApi("redis/delete", "POST", { connectionString: connectionString || "localhost:6379", key, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_redis_keys", {
+    title: "Redis Key Scan",
+    description: `Redis'teki key'leri pattern ile arar. Opsiyonel olarak degerleriyle birlikte getirir.
+"Redis key'leri listele", "user:* key'lerini bul", "cache'te neler var" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional(),
+        pattern: z.string().optional().describe("Key pattern (varsayilan '*', orn: 'user:*', 'session:*')"),
+        maxCount: z.number().optional().describe("Maksimum sonuc (varsayilan 100)"),
+        withValues: z.boolean().optional().describe("Degerleri de getir"),
+        database: z.number().optional(),
+    },
+}, async ({ connectionString, pattern, maxCount, withValues, database }) => {
+    const data = await devkitApi("redis/keys", "POST", { connectionString: connectionString || "localhost:6379", pattern: pattern || "*", maxCount: maxCount || 100, withValues: withValues || false, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_redis_hash", {
+    title: "Redis Hash Operations",
+    description: `Redis Hash islemleri: getall, get, set, delete.
+"hash'in tum field'larini getir", "hash field ekle" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional(),
+        key: z.string().min(1).describe("Hash key"),
+        action: z.enum(["getall", "get", "set", "delete"]).describe("Islem"),
+        field: z.string().optional().describe("Hash field adi (get/set/delete icin)"),
+        value: z.string().optional().describe("Deger (set icin)"),
+        database: z.number().optional(),
+    },
+}, async ({ connectionString, key, action, field, value, database }) => {
+    const data = await devkitApi("redis/hash", "POST", { connectionString: connectionString || "localhost:6379", key, action, field, value, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_redis_admin", {
+    title: "Redis Admin",
+    description: `Redis admin islemleri: info, dbsize, flushdb, ping.
+"Redis durumu", "kac key var", "cache bosalt", "Redis ping" dediginde CAGIR.`,
+    inputSchema: {
+        connectionString: z.string().optional(),
+        action: z.enum(["info", "dbsize", "flushdb", "ping"]),
+        database: z.number().optional(),
+    },
+}, async ({ connectionString, action, database }) => {
+    const data = await devkitApi("redis/admin", "POST", { connectionString: connectionString || "localhost:6379", action, database: database || 0 });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// KAFKA TOOLS (v2 - dedicated controller)
+// Mevcut index.ts'teki devkit_kafka_* tool'lari SIL, bunlarla degistir
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_kafka_topics", {
+    title: "Kafka Topic Operations",
+    description: `Kafka topic islemleri: listele, olustur, sil, detay goster.
+"Kafka topic'leri listele", "yeni topic olustur", "topic sil", "topic detayini goster" dediginde CAGIR.`,
+    inputSchema: {
+        action: z.enum(["list", "create", "delete", "describe"]),
+        topicName: z.string().optional().describe("Topic adi (create/delete/describe icin)"),
+        partitions: z.number().optional().describe("Partition sayisi (create icin, varsayilan 3)"),
+        replicationFactor: z.number().optional().describe("Replication factor (create icin, varsayilan 1)"),
+        bootstrapServers: z.string().optional().describe("Kafka broker (varsayilan localhost:9092)"),
+    },
+}, async ({ action, topicName, partitions, replicationFactor, bootstrapServers }) => {
+    const broker = bootstrapServers || "localhost:9092";
+    let endpoint;
+    const body = { bootstrapServers: broker, topicName, partitions, replicationFactor };
+    switch (action) {
+        case "list":
+            endpoint = "kafka/topics";
+            break;
+        case "create":
+            endpoint = "kafka/topics/create";
+            break;
+        case "delete":
+            endpoint = "kafka/topics/delete";
+            break;
+        case "describe":
+            endpoint = "kafka/topics/describe";
+            break;
+        default: return { content: [{ type: "text", text: "Gecersiz action." }] };
+    }
+    const data = await devkitApi(endpoint, "POST", body);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_kafka_produce", {
+    title: "Kafka Produce Message",
+    description: `Kafka topic'e mesaj gonderir (JSON veya text).
+"Kafka'ya mesaj gonder", "event publish et", "topic'e yaz" dediginde CAGIR.`,
+    inputSchema: {
+        topicName: z.string().min(1).describe("Topic adi"),
+        message: z.string().min(1).describe("Mesaj icerigi (JSON veya text)"),
+        key: z.string().optional().describe("Message key (partitioning icin)"),
+        bootstrapServers: z.string().optional().describe("Kafka broker (varsayilan localhost:9092)"),
+    },
+}, async ({ topicName, message, key, bootstrapServers }) => {
+    const data = await devkitApi("kafka/produce", "POST", { bootstrapServers: bootstrapServers || "localhost:9092", topicName, message, key });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_kafka_produce_batch", {
+    title: "Kafka Produce Batch Messages",
+    description: `Kafka topic'e birden fazla mesaj gonderir.
+"toplu mesaj gonder", "batch event yayinla" dediginde CAGIR.`,
+    inputSchema: {
+        topicName: z.string().min(1).describe("Topic adi"),
+        messages: z.array(z.object({ key: z.string().optional(), value: z.string() })).min(1).describe("Mesaj listesi [{key?, value}]"),
+        bootstrapServers: z.string().optional(),
+    },
+}, async ({ topicName, messages, bootstrapServers }) => {
+    const data = await devkitApi("kafka/produce/batch", "POST", { bootstrapServers: bootstrapServers || "localhost:9092", topicName, messages });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_kafka_consume", {
+    title: "Kafka Consume Messages",
+    description: `Kafka topic'ten mesajlari okur (son N mesaj).
+"Kafka'daki mesajlari oku", "topic'teki eventleri goster", "consume et" dediginde CAGIR.`,
+    inputSchema: {
+        topicName: z.string().min(1).describe("Topic adi"),
+        maxMessages: z.number().optional().describe("Maksimum mesaj sayisi (varsayilan 10)"),
+        fromBeginning: z.boolean().optional().describe("Bastan oku (varsayilan true)"),
+        timeoutMs: z.number().optional().describe("Timeout ms (varsayilan 5000)"),
+        bootstrapServers: z.string().optional(),
+    },
+}, async ({ topicName, maxMessages, fromBeginning, timeoutMs, bootstrapServers }) => {
+    const data = await devkitApi("kafka/consume", "POST", {
+        bootstrapServers: bootstrapServers || "localhost:9092", topicName,
+        maxMessages: maxMessages || 10, fromBeginning: fromBeginning ?? true, timeoutMs: timeoutMs || 5000,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_kafka_groups", {
+    title: "Kafka Consumer Groups",
+    description: `Kafka consumer group'lari listeler.
+"consumer group'lari goster" dediginde CAGIR.`,
+    inputSchema: {
+        bootstrapServers: z.string().optional().describe("Kafka broker (varsayilan localhost:9092)"),
+    },
+}, async ({ bootstrapServers }) => {
+    const data = await devkitApi("kafka/groups", "POST", { bootstrapServers: bootstrapServers || "localhost:9092" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// PROCESS MANAGER TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_process_start", {
+    title: "Start Background Process",
+    description: `Arka planda process baslatir (dotnet watch run, npm run dev, docker compose up -d vb.) ve takip eder.
+"projeyi arka planda calistir", "dotnet watch baslat", "npm run dev baslat" dediginde CAGIR.`,
+    inputSchema: {
+        command: z.string().min(1).describe("Komut (orn: 'dotnet watch run', 'npm run dev')"),
+        workingDirectory: z.string().optional().describe("Calisma dizini (bossa aktif profil)"),
+        id: z.string().optional().describe("Process ID (orn: 'api', 'frontend', 'worker')"),
+    },
+}, async ({ command, workingDirectory, id }) => {
+    let dir = workingDirectory;
+    if (!dir) {
+        const profileRes = await devkitApi("profile/active", "GET");
+        dir = profileRes?.profile?.workspace;
+    }
+    if (!dir)
+        return { content: [{ type: "text", text: "Calisma dizini belirtilmedi." }] };
+    const data = await devkitApi("process/start", "POST", { command, workingDirectory: dir, id });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_process_stop", {
+    title: "Stop Background Process",
+    description: `Arka plandaki process'i durdurur.
+"process'i durdur", "API'yi kapat", "worker'i durdur" dediginde CAGIR.`,
+    inputSchema: {
+        processId: z.string().min(1).describe("Process ID"),
+    },
+}, async ({ processId }) => {
+    const data = await devkitApi(`process/stop/${processId}`, "POST");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_process_output", {
+    title: "Get Process Output",
+    description: `Arka plandaki process'in ciktisini (log) gosterir.
+"process loglarini goster", "API ciktisini goster" dediginde CAGIR.`,
+    inputSchema: {
+        processId: z.string().min(1).describe("Process ID"),
+        tail: z.number().optional().describe("Son N satir (varsayilan 50)"),
+    },
+}, async ({ processId, tail }) => {
+    const data = await devkitApi(`process/output/${processId}?tail=${tail || 50}`, "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_process_list", {
+    title: "List Running Processes",
+    description: `Arka planda calisan tum process'leri listeler.
+"calisan process'leri goster", "neler calisiyor" dediginde CAGIR.`,
+    inputSchema: {},
+}, async () => {
+    const data = await devkitApi("process/list", "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
 // PROJECT MANAGEMENT TOOLS (Package + Reference + Diff)
 // Bu blogu index.ts'te MIGRATION TOOLS'un ustune ekle
 // ═══════════════════════════════════════════════
@@ -1687,6 +2690,445 @@ Kullanici "DevKit context'ini yukle", "son context'i al", "DevKit'ten gelen veri
             },
         ],
     };
+});
+// ═══════════════════════════════════════════════
+// GIT - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_git_init", {
+    title: "Git Init",
+    description: "Yeni bir git repository baslatir (git init).",
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("git/init", "POST", {});
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_init_connect", {
+    title: "Git Init & Connect Remote",
+    description: "Git init yapar, remote ekler, opsiyonel olarak ilk commit ve push yapar. Yeni projeyi remote repo'ya baglamak icin ideal.",
+    inputSchema: {
+        remoteUrl: z.string().min(1).describe("Remote repository URL (ornegin: https://github.com/user/repo.git)"),
+        defaultBranch: z.string().default("main").describe("Default branch adi"),
+        initialCommit: z.boolean().default(true).describe("Ilk commit yapilsin mi"),
+        commitMessage: z.string().default("initial commit").describe("Ilk commit mesaji"),
+        pushAfterConnect: z.boolean().default(true).describe("Connect sonrasi push yapilsin mi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ remoteUrl, defaultBranch, initialCommit, commitMessage, pushAfterConnect }) => {
+    const data = await devkitApi("git/init-connect", "POST", {
+        remoteUrl,
+        defaultBranch: defaultBranch || "main",
+        initialCommit: initialCommit ?? true,
+        commitMessage: commitMessage || "initial commit",
+        pushAfterConnect: pushAfterConnect ?? true,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_remotes", {
+    title: "Git Remotes",
+    description: "Tanimli remote'lari listeler (git remote -v).",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("git/remotes", "POST", {});
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_rename_branch", {
+    title: "Git Rename Branch",
+    description: "Bir branch'in adini degistirir (git branch -m).",
+    inputSchema: {
+        oldName: z.string().min(1).describe("Mevcut branch adi"),
+        newName: z.string().min(1).describe("Yeni branch adi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ oldName, newName }) => {
+    const data = await devkitApi("git/rename-branch", "POST", { oldName, newName });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_stage", {
+    title: "Git Stage",
+    description: "Dosyalari staging area'ya ekler (git add). Path belirtilmezse tum degisiklikleri stage eder.",
+    inputSchema: {
+        path: z.string().optional().describe("Stage edilecek dosya/klasor yolu (default: '.' yani tumu)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ path }) => {
+    const data = await devkitApi("git/stage", "POST", { path: path || "." });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_stash_list", {
+    title: "Git Stash List",
+    description: "Stash listesini gosterir (git stash list).",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("git/stash-list", "POST", {});
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_diff", {
+    title: "Git Diff",
+    description: "Degisiklikleri gosterir (git diff). staged=true ile staged degisiklikleri gosterir.",
+    inputSchema: {
+        staged: z.boolean().default(false).describe("Staged degisiklikleri goster"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ staged }) => {
+    const data = await devkitApi("git/diff", "POST", { staged: staged || false });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_reset", {
+    title: "Git Reset (Unstage)",
+    description: "Staging area'dan dosya cikarir (git reset). Dosya belirtilmezse tum staged degisiklikleri unstage eder.",
+    inputSchema: {
+        path: z.string().optional().describe("Unstage edilecek dosya yolu (bos birakilirsa tumu)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ path }) => {
+    const data = await devkitApi("git/reset", "POST", { path });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_merge_abort", {
+    title: "Git Merge Abort",
+    description: "Devam eden merge islemini iptal eder (git merge --abort).",
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("git/merge-abort", "POST", {});
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_git_command", {
+    title: "Git Custom Command",
+    description: "Herhangi bir git komutunu calistirir. git'ten sonraki argumanlari girin (ornegin: 'log --oneline -5', 'cherry-pick abc123').",
+    inputSchema: {
+        arguments: z.string().min(1).describe("Git argumanlari (ornegin: 'log --oneline -5')"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ arguments: args }) => {
+    const data = await devkitApi("git/command", "POST", { arguments: args });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// DOCKER - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_docker_build", {
+    title: "Docker Compose Build",
+    description: "Docker compose ile servisleri build eder (docker compose build).",
+    inputSchema: {
+        workingDir: z.string().optional().describe("docker-compose.yml dosyasinin bulundugu klasor"),
+        file: z.string().optional().describe("Compose dosya adi (default: docker-compose.yml)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ workingDir, file }) => {
+    const data = await devkitApi("docker/compose/build", "POST", { workingDir, file });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_docker_restart", {
+    title: "Docker Compose Restart",
+    description: "Docker compose servislerini yeniden baslatir. Belirli bir servis adi verilebilir.",
+    inputSchema: {
+        workingDir: z.string().optional().describe("docker-compose.yml dosyasinin bulundugu klasor"),
+        serviceName: z.string().optional().describe("Yeniden baslatilacak servis adi (bos ise tumu)"),
+        file: z.string().optional().describe("Compose dosya adi (default: docker-compose.yml)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ workingDir, serviceName, file }) => {
+    const data = await devkitApi("docker/compose/restart", "POST", { workingDir, serviceName, file });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_docker_pull", {
+    title: "Docker Compose Pull",
+    description: "Docker compose servislerinin image'larini ceker (docker compose pull).",
+    inputSchema: {
+        workingDir: z.string().optional().describe("docker-compose.yml dosyasinin bulundugu klasor"),
+        file: z.string().optional().describe("Compose dosya adi (default: docker-compose.yml)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ workingDir, file }) => {
+    const data = await devkitApi("docker/compose/pull", "POST", { workingDir, file });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_docker_command", {
+    title: "Docker Custom Command",
+    description: "Herhangi bir docker/docker-compose komutunu calistirir.",
+    inputSchema: {
+        workingDir: z.string().optional().describe("Calisma dizini"),
+        arguments: z.string().min(1).describe("Docker argumanlari (ornegin: 'compose exec postgres psql -U postgres')"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ workingDir, arguments: args }) => {
+    const data = await devkitApi("docker/compose/command", "POST", { workingDir, arguments: args });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// KAFKA - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_kafka_topic_create", {
+    title: "Kafka Topic Create",
+    description: "Yeni bir Kafka topic olusturur.",
+    inputSchema: {
+        bootstrapServers: z.string().optional().describe("Kafka broker adresi (default: localhost:9092)"),
+        topicName: z.string().min(1).describe("Olusturulacak topic adi"),
+        partitions: z.number().int().optional().describe("Partition sayisi (default: 3)"),
+        replicationFactor: z.number().int().optional().describe("Replication factor (default: 1)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ bootstrapServers, topicName, partitions, replicationFactor }) => {
+    const data = await devkitApi("kafka/topics/create", "POST", {
+        bootstrapServers: bootstrapServers || "localhost:9092",
+        topicName,
+        partitions: partitions || 3,
+        replicationFactor: replicationFactor || 1,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_kafka_topic_delete", {
+    title: "Kafka Topic Delete",
+    description: "Bir Kafka topic'i siler.",
+    inputSchema: {
+        bootstrapServers: z.string().optional().describe("Kafka broker adresi (default: localhost:9092)"),
+        topicName: z.string().min(1).describe("Silinecek topic adi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ bootstrapServers, topicName }) => {
+    const data = await devkitApi("kafka/topics/delete", "POST", {
+        bootstrapServers: bootstrapServers || "localhost:9092",
+        topicName,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_kafka_topic_describe", {
+    title: "Kafka Topic Describe",
+    description: "Bir Kafka topic'inin detaylarini (partition, replica, leader bilgileri) gosterir.",
+    inputSchema: {
+        bootstrapServers: z.string().optional().describe("Kafka broker adresi (default: localhost:9092)"),
+        topicName: z.string().min(1).describe("Detay goruntulenecek topic adi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ bootstrapServers, topicName }) => {
+    const data = await devkitApi("kafka/topics/describe", "POST", {
+        bootstrapServers: bootstrapServers || "localhost:9092",
+        topicName,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// AZURE - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_azure_command", {
+    title: "Azure CLI Command",
+    description: "Herhangi bir Azure CLI komutunu calistirir (az ...). Ornegin: 'webapp list', 'group list', 'account show'.",
+    inputSchema: {
+        command: z.string().min(1).describe("Azure CLI komutu (az'den sonraki kisim, ornegin: 'webapp list')"),
+        arguments: z.string().optional().describe("Ek argumanlar (ornegin: '--resource-group myRg --output table')"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ command, arguments: args }) => {
+    const data = await devkitApi("azure/command", "POST", { command, arguments: args || "" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_azure_resources", {
+    title: "Azure List Resources",
+    description: "Aktif profildeki Azure resource'larini listeler (resource group, subscription, app services ve slotlar).",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("azure/resources", "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// CRYPTO - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_crypto_read_config", {
+    title: "Crypto Read Config",
+    description: "Konfigurasyonu okur (appsettings.json dosyasindan veya Azure App Service'den). MasterKey, connection string gibi degerleri gosterir.",
+    inputSchema: {
+        source: z.enum(["file", "azure"]).describe("Kaynak tipi: file veya azure"),
+        filePath: z.string().optional().describe("source=file ise dosya yolu (ornegin: appsettings.json)"),
+        resourceGroup: z.string().optional().describe("source=azure ise resource group adi"),
+        appName: z.string().optional().describe("source=azure ise app service adi"),
+        subscriptionId: z.string().optional().describe("source=azure ise subscription ID"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ source, filePath, resourceGroup, appName, subscriptionId }) => {
+    const data = await devkitApi("crypto/read-config", "POST", { source, filePath, resourceGroup, appName, subscriptionId });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_crypto_tables", {
+    title: "Crypto List Tables",
+    description: "Veritabanindaki tablolari listeler (crypto islemleri icin tablo secimi yapmak uzere).",
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Veritabani connection string"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ connectionString }) => {
+    const data = await devkitApi("crypto/tables", "POST", { connectionString });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_crypto_columns", {
+    title: "Crypto List Columns",
+    description: "Belirtilen tablonun kolonlarini listeler (hangi kolonun encrypted oldugunu tespit etmek icin).",
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Veritabani connection string"),
+        tableName: z.string().min(1).describe("Tablo adi"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ connectionString, tableName }) => {
+    const data = await devkitApi("crypto/columns", "POST", { connectionString, tableName });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_crypto_decrypt_table", {
+    title: "Crypto Decrypt Table",
+    description: "Tablodaki encrypted verileri toplu olarak decrypt eder. MasterKey ile ciphertext kolonundaki degerleri cozer.",
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Veritabani connection string"),
+        tableName: z.string().min(1).describe("Tablo adi"),
+        masterKey: z.string().min(1).describe("Master encryption key"),
+        ciphertextColumn: z.string().min(1).describe("Encrypted veri iceren kolon adi"),
+        algorithmColumn: z.string().optional().describe("Algoritma bilgisi iceren kolon adi"),
+        keyIdColumn: z.string().optional().describe("Key ID bilgisi iceren kolon adi"),
+        pkColumn: z.string().default("id").describe("Primary key kolon adi"),
+        displayColumns: z.array(z.string()).optional().describe("Ek gosterilecek kolon adlari"),
+        limit: z.number().int().optional().describe("Maksimum satir sayisi (default: 100)"),
+    },
+}, async ({ connectionString, tableName, masterKey, ciphertextColumn, algorithmColumn, keyIdColumn, pkColumn, displayColumns, limit }) => {
+    const data = await devkitApi("crypto/decrypt", "POST", {
+        connectionString, tableName, masterKey, ciphertextColumn,
+        algorithmColumn, keyIdColumn, pkColumn: pkColumn || "id",
+        displayColumns, limit: limit || 100,
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_crypto_rekey", {
+    title: "Crypto Re-Key",
+    description: "Tablodaki encrypted verileri eski key ile decrypt edip yeni key ile tekrar encrypt eder. Key rotation islemi.",
+    inputSchema: {
+        connectionString: z.string().min(1).describe("Veritabani connection string"),
+        tableName: z.string().min(1).describe("Tablo adi"),
+        oldMasterKey: z.string().min(1).describe("Eski master key"),
+        newMasterKey: z.string().min(1).describe("Yeni master key"),
+        ciphertextColumn: z.string().min(1).describe("Encrypted veri iceren kolon adi"),
+        algorithmColumn: z.string().default("value_algorithm").describe("Algoritma kolon adi"),
+        keyIdColumn: z.string().default("value_key_id").describe("Key ID kolon adi"),
+        pkColumn: z.string().default("id").describe("Primary key kolon adi"),
+        newKeyId: z.string().default("local-masterkey-v2").describe("Yeni key ID"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ connectionString, tableName, oldMasterKey, newMasterKey, ciphertextColumn, algorithmColumn, keyIdColumn, pkColumn, newKeyId }) => {
+    const data = await devkitApi("crypto/rekey", "POST", {
+        connectionString, tableName, oldMasterKey, newMasterKey, ciphertextColumn,
+        algorithmColumn: algorithmColumn || "value_algorithm",
+        keyIdColumn: keyIdColumn || "value_key_id",
+        pkColumn: pkColumn || "id",
+        newKeyId: newKeyId || "local-masterkey-v2",
+    });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_crypto_update_config", {
+    title: "Crypto Update Config",
+    description: "Konfigurasyon degerlerini gunceller (appsettings.json dosyasinda veya Azure App Service'de). Key rotation sonrasi yeni key'i yazmak icin kullanilir.",
+    inputSchema: {
+        source: z.enum(["file", "azure"]).describe("Kaynak tipi: file veya azure"),
+        filePath: z.string().optional().describe("source=file ise dosya yolu"),
+        resourceGroup: z.string().optional().describe("source=azure ise resource group adi"),
+        appName: z.string().optional().describe("source=azure ise app service adi"),
+        subscriptionId: z.string().optional().describe("source=azure ise subscription ID"),
+        updates: z.record(z.string()).describe("Guncellenecek key-value cifti (ornegin: { 'Encryption:MasterKey': 'yeni-key' })"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ source, filePath, resourceGroup, appName, subscriptionId, updates }) => {
+    const data = await devkitApi("crypto/update-config", "POST", { source, filePath, resourceGroup, appName, subscriptionId, updates });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// PROCESS - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_process_delete", {
+    title: "Process Delete/Cleanup",
+    description: "Yonetilen bir process'i listeden kaldirir. Calisiyor ise once durdurur sonra temizler.",
+    inputSchema: {
+        processId: z.string().min(1).describe("Kaldirilacak process ID"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+}, async ({ processId }) => {
+    const data = await devkitApi(`process/${processId}`, "DELETE");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// FILE OPERATIONS - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_file_rename", {
+    title: "File Rename",
+    description: "Dosya veya klasoru yeniden adlandirir.",
+    inputSchema: {
+        sourcePath: z.string().min(1).describe("Mevcut dosya/klasor yolu"),
+        destinationPath: z.string().min(1).describe("Yeni dosya/klasor yolu"),
+        overwrite: z.boolean().default(false).describe("Hedef varsa uzerine yaz"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ sourcePath, destinationPath, overwrite }) => {
+    const data = await devkitApi("run/file/rename", "POST", { sourcePath, destinationPath, overwrite: overwrite || false });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// SYSTEM - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_browse_folder", {
+    title: "Browse Folder Dialog",
+    description: "Isletim sistemi klasor secim dialogunu acar. Kullanici bir klasor secer ve yolu doner. Workspace secimi icin kullanilabilir.",
+    inputSchema: {
+        initialPath: z.string().optional().describe("Dialogun acilacagi baslangic klasoru"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ initialPath }) => {
+    const data = await devkitApi("system/browse-folder", "POST", { initialPath });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_browse_file", {
+    title: "Browse File Dialog",
+    description: "Isletim sistemi dosya secim dialogunu acar. Kullanici bir dosya secer ve yolu doner.",
+    inputSchema: {
+        initialPath: z.string().optional().describe("Dialogun acilacagi baslangic klasoru"),
+        filter: z.string().optional().describe("Dosya filtresi (ornegin: 'JSON files (*.json)|*.json')"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ initialPath, filter }) => {
+    const data = await devkitApi("system/browse-file", "POST", { initialPath, filter });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_save_context", {
+    title: "Save Context to DevKit",
+    description: "DevKit backend'e context kaydeder. Claude'dan DevKit UI'a veri gondermek icin kullanilir.",
+    inputSchema: {
+        content: z.string().min(1).describe("Kaydedilecek icerik"),
+        type: z.string().optional().describe("Context tipi (ornegin: 'architecture', 'scan', 'general')"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ content, type }) => {
+    const data = await devkitApi("system/context", "POST", { content, type: type || "general" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+server.registerTool("devkit_clear_context", {
+    title: "Clear DevKit Context",
+    description: "DevKit backend'deki kayitli context'i temizler.",
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("system/context", "DELETE");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+});
+// ═══════════════════════════════════════════════
+// ENV COMPARE - MISSING TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_env_scan", {
+    title: "Env Config Scan",
+    description: "Projedeki appsettings dosyalarini tarar ve listeler (appsettings.json, appsettings.Development.json, appsettings.Local.json vb.).",
+    inputSchema: {
+        projectPath: z.string().optional().describe("Proje dizini (bos ise aktif profil workspace'i kullanilir)"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ projectPath }) => {
+    const data = await devkitApi("envcompare/scan", "POST", { projectPath: projectPath || "" });
+    return { content: [{ type: "text", text: formatResult(data) }] };
 });
 // ═══════════════════════════════════════════════
 // CLI COMMANDS: --setup, --cleanup
