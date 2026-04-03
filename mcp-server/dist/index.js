@@ -1534,6 +1534,31 @@ server.registerTool("devkit_crypto_encrypt", {
     return { content: [{ type: "text", text: formatResult(data) }] };
 });
 // ═══════════════════════════════════════════════
+// CONTEXT BRIDGE TOOLS
+// ═══════════════════════════════════════════════
+server.registerTool("devkit_load_last_context", {
+    title: "Load Last Context from DevKit UI",
+    description: `DevKit UI'dan gonderilen son context'i yukler.
+Kullanici DevKit arayuzunde "Claude'da Ac" butonuna bastiginda context backend'e kaydedilir.
+Bu tool o context'i yukler. Icerik mimari tasarim, proje tarama sonucu veya baska bir veri olabilir.
+Kullanici "DevKit context'ini yukle", "son context'i al", "DevKit'ten gelen veriyi goster" dediginde cagir.`,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async () => {
+    const data = await devkitApi("system/context", "GET");
+    if (!data.hasContext) {
+        return { content: [{ type: "text", text: "DevKit'te kayitli context yok. Once DevKit UI'dan 'Claude'da Ac' butonuna basin." }] };
+    }
+    return {
+        content: [
+            {
+                type: "text",
+                text: `DEVKIT CONTEXT YUKLENDI (Tip: ${data.type}, Boyut: ${data.sizeKb}KB)\n\n${data.content}`,
+            },
+        ],
+    };
+});
+// ═══════════════════════════════════════════════
 // CLI COMMANDS: --setup, --cleanup
 // ═══════════════════════════════════════════════
 function findClaudeConfigPath() {

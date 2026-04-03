@@ -1,14 +1,985 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/devkit.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevKit</title>
-    <script type="module" crossorigin src="/assets/index-BR9DVzNL.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CfTrMIWF.css">
-  </head>
-  <body class="bg-gray-950 text-gray-100">
-    <div id="root"></div>
-  </body>
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevKit - Developer Toolkit & AI Companion</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #0f1117;
+            --sidebar: #161822;
+            --border: #2a2d3a;
+            --text: #e1e4eb;
+            --muted: #8b8fa3;
+            --brand: #6366f1;
+            --brand2: #818cf8;
+            --card: #1c1f2e;
+            --hover: #232638;
+            --green: #10b981;
+            --amber: #f59e0b;
+            --red: #ef4444;
+            --code-bg: #1a1d2e
+        }
+
+        body {
+            font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            display: flex;
+            height: 100vh;
+            overflow: hidden
+        }
+
+        a {
+            color: var(--brand2);
+            text-decoration: none
+        }
+
+            a:hover {
+                text-decoration: underline
+            }
+        /* SIDEBAR */
+        .sidebar {
+            width: 300px;
+            background: var(--sidebar);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transition: width .2s
+        }
+
+            .sidebar.collapsed {
+                width: 0;
+                overflow: hidden;
+                border: none
+            }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px
+        }
+
+            .sidebar-header .logo {
+                width: 36px;
+                height: 36px;
+                background: var(--brand);
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+                font-weight: 700;
+                color: #fff
+            }
+
+            .sidebar-header h2 {
+                font-size: 16px;
+                color: #fff
+            }
+
+            .sidebar-header small {
+                font-size: 11px;
+                color: var(--muted);
+                display: block
+            }
+
+        .search-box {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border)
+        }
+
+            .search-box input {
+                width: 100%;
+                padding: 8px 12px;
+                border-radius: 6px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+                color: var(--text);
+                font-size: 13px;
+                outline: none
+            }
+
+                .search-box input:focus {
+                    border-color: var(--brand)
+                }
+
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0
+        }
+
+        .nav-section {
+            padding: 0 8px
+        }
+
+        .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--muted);
+            padding: 12px 12px 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none
+        }
+
+            .nav-section-title:hover {
+                color: var(--text)
+            }
+
+            .nav-section-title .arrow {
+                font-size: 10px;
+                transition: transform .2s
+            }
+
+            .nav-section-title.collapsed .arrow {
+                transform: rotate(-90deg)
+            }
+
+        .nav-items {
+            padding: 0 4px
+        }
+
+            .nav-items.hidden {
+                display: none
+            }
+
+        .nav-item {
+            display: block;
+            padding: 7px 12px 7px 20px;
+            font-size: 13px;
+            color: var(--muted);
+            border-radius: 4px;
+            cursor: pointer;
+            border-left: 2px solid transparent
+        }
+
+            .nav-item:hover {
+                background: var(--hover);
+                color: var(--text);
+                text-decoration: none
+            }
+
+            .nav-item.active {
+                color: var(--brand2);
+                border-left-color: var(--brand);
+                background: rgba(99,102,241,.08);
+                font-weight: 500
+            }
+        /* MAIN */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden
+        }
+
+        .topbar {
+            padding: 8px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--sidebar)
+        }
+
+            .topbar .toggle {
+                background: none;
+                border: none;
+                color: var(--muted);
+                cursor: pointer;
+                font-size: 18px;
+                padding: 4px
+            }
+
+                .topbar .toggle:hover {
+                    color: var(--text)
+                }
+
+            .topbar .breadcrumb {
+                font-size: 12px;
+                color: var(--muted)
+            }
+
+                .topbar .breadcrumb span {
+                    color: var(--text)
+                }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px 48px;
+            max-width: 900px
+        }
+
+            .content h1 {
+                font-size: 28px;
+                font-weight: 700;
+                margin-bottom: 8px;
+                color: #fff
+            }
+
+            .content h2 {
+                font-size: 20px;
+                font-weight: 600;
+                margin: 32px 0 12px;
+                color: #fff;
+                padding-bottom: 8px;
+                border-bottom: 1px solid var(--border)
+            }
+
+            .content h3 {
+                font-size: 16px;
+                font-weight: 600;
+                margin: 24px 0 8px;
+                color: var(--text)
+            }
+
+            .content p {
+                margin-bottom: 12px;
+                color: var(--muted);
+                font-size: 14px
+            }
+
+            .content ul, .content ol {
+                margin: 0 0 16px 20px;
+                color: var(--muted);
+                font-size: 14px
+            }
+
+            .content li {
+                margin-bottom: 6px
+            }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600
+        }
+
+            .badge.green {
+                background: rgba(16,185,129,.15);
+                color: var(--green)
+            }
+
+            .badge.amber {
+                background: rgba(245,158,11,.15);
+                color: var(--amber)
+            }
+
+            .badge.brand {
+                background: rgba(99,102,241,.15);
+                color: var(--brand2)
+            }
+
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0 20px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5
+        }
+
+        code {
+            font-family: 'Cascadia Code','Fira Code',Consolas,monospace;
+            font-size: 13px
+        }
+
+        p code {
+            background: var(--code-bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 12px 0
+        }
+
+            .card h4 {
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: #fff
+            }
+
+            .card p {
+                margin-bottom: 0
+            }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px
+        }
+
+        .callout {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+            font-size: 13px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start
+        }
+
+            .callout.info {
+                background: rgba(99,102,241,.08);
+                border-left: 3px solid var(--brand)
+            }
+
+            .callout.warn {
+                background: rgba(245,158,11,.08);
+                border-left: 3px solid var(--amber)
+            }
+
+            .callout.success {
+                background: rgba(16,185,129,.08);
+                border-left: 3px solid var(--green)
+            }
+
+            .callout .icon {
+                font-size: 16px;
+                flex-shrink: 0;
+                margin-top: 1px
+            }
+
+        .status-bar {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            background: var(--sidebar);
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            gap: 16px
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 4px
+        }
+
+            .status-dot.online {
+                background: var(--green)
+            }
+
+            .status-dot.offline {
+                background: var(--red)
+            }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0 20px;
+            font-size: 13px
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text);
+            font-size: 12px;
+            text-transform: uppercase
+        }
+
+        td {
+            color: var(--muted)
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">D</div>
+            <div><h2>DevKit</h2><small>v2.0.0 Documentation</small></div>
+        </div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="&#128269; Basliga gore bulun..." oninput="filterNav(this.value)">
+        </div>
+        <nav class="sidebar-nav" id="sidebarNav">
+            <div class="nav-section" data-section="overview">
+                <div class="nav-section-title" onclick="toggleSection(this)"><span>Genel Bakis</span><span class="arrow">▼</span></div>
+                <div class="nav-items">
+                    <a class="nav-item active" onclick="showPage('welcome')">Hosgeldiniz</a>
+                    <a class="nav-item" onclick="showPage('quickstart')">Hizli Baslangic</a>
+                    <a class="nav-item" onclick="showPage('architecture')">Mimari Yapi</a>
+                </div>
+            </div>
+            <div class="nav-section" data-section="setup">
+                <div class="nav-section-title" onclick="toggleSection(this)"><span>Kurulum</span><span class="arrow">▼</span></div>
+                <div class="nav-items">
+                    <a class="nav-item" onclick="showPage('ui-setup')">UI Kurulumu</a>
+                    <a class="nav-item" onclick="showPage('mcp-claude-desktop')">Claude Desktop MCP</a>
+                    <a class="nav-item" onclick="showPage('mcp-claude-code')">Claude Code MCP</a>
+                </div>
+            </div>
+            <div class="nav-section" data-section="features">
+                <div class="nav-section-title" onclick="toggleSection(this)"><span>Ozellikler</span><span class="arrow">▼</span></div>
+                <div class="nav-items">
+                    <a class="nav-item" onclick="showPage('feat-architect')">Architecture Designer</a>
+                    <a class="nav-item" onclick="showPage('feat-scaffold')">Project Scaffolding</a>
+                    <a class="nav-item" onclick="showPage('feat-import')">AI File Import</a>
+                    <a class="nav-item" onclick="showPage('feat-git')">Git Management</a>
+                    <a class="nav-item" onclick="showPage('feat-docker')">Docker Compose</a>
+                    <a class="nav-item" onclick="showPage('feat-schema')">DB Schema Visualizer</a>
+                    <a class="nav-item" onclick="showPage('feat-apitest')">API Test Runner</a>
+                    <a class="nav-item" onclick="showPage('feat-audit')">Package Auditor</a>
+                    <a class="nav-item" onclick="showPage('feat-scanner')">Project Scanner</a>
+                    <a class="nav-item" onclick="showPage('feat-claude-bridge')">Claude Bridge</a>
+                    <a class="nav-item" onclick="showPage('feat-env')">Env Comparator</a>
+                    <a class="nav-item" onclick="showPage('feat-logs')">Log Viewer</a>
+                    <a class="nav-item" onclick="showPage('feat-migration')">Migration Manager</a>
+                    <a class="nav-item" onclick="showPage('feat-projmgmt')">Project Management</a>
+                    <a class="nav-item" onclick="showPage('feat-crypto')">Crypto & Credentials</a>
+                    <a class="nav-item" onclick="showPage('feat-azure')">Azure Management</a>
+                    <a class="nav-item" onclick="showPage('feat-profiles')">Profil Sistemi</a>
+                </div>
+            </div>
+            <div class="nav-section" data-section="mcp-examples">
+                <div class="nav-section-title" onclick="toggleSection(this)"><span>MCP Kullanim Ornekleri</span><span class="arrow">▼</span></div>
+                <div class="nav-items">
+                    <a class="nav-item" onclick="showPage('mcp-arch')">Mimari Tasarim</a>
+                    <a class="nav-item" onclick="showPage('mcp-scaffold')">Proje Olusturma</a>
+                    <a class="nav-item" onclick="showPage('mcp-dev')">Gelistirme Akisi</a>
+                    <a class="nav-item" onclick="showPage('mcp-git')">Git Islemleri</a>
+                    <a class="nav-item" onclick="showPage('mcp-docker')">Docker Islemleri</a>
+                    <a class="nav-item" onclick="showPage('mcp-db')">Veritabani Islemleri</a>
+                    <a class="nav-item" onclick="showPage('mcp-scanner')">Scanner & Claude Bridge</a>
+                    <a class="nav-item" onclick="showPage('mcp-all')">Tum MCP Komutlari</a>
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <div class="main">
+        <div class="topbar">
+            <button class="toggle" onclick="toggleSidebar()">☰</button>
+            <div class="breadcrumb">DevKit / <span id="breadcrumb">Hosgeldiniz</span></div>
+        </div>
+        <div class="content" id="content"></div>
+        <div class="status-bar">
+            <span><span class="status-dot online"></span> API: localhost:5199</span>
+            <span>UI: localhost:5173</span>
+            <span>MCP: devkit-mcp-server</span>
+        </div>
+    </div>
+
+    <script>
+        const pages = {
+            welcome: `
+<h1>DevKit - Developer Toolkit & AI Companion</h1>
+<p>DevKit, AI destekli gelistirme is akislarini otomize eden yerel bir web uygulamasidir. .NET 9 backend + React/Vite/Tailwind frontend ile calisir.</p>
+
+<div class="callout info"><span class="icon">ℹ️</span><div><strong>Backend calisiyor!</strong> Bu sayfayi goruyorsaniz DevKit API basariyla ayaga kalkmistir. Simdi UI'yi baslatin ve gelistirmeye baslayin.</div></div>
+
+<h2>Nasil Calisir?</h2>
+<div class="grid-2">
+<div class="card"><h4>🖥️ Web UI</h4><p>localhost:5173 uzerinden erisilen React arayuzu. Mimari tasarim, scaffold, git, docker ve daha fazlasi.</p></div>
+<div class="card"><h4>🤖 MCP Server</h4><p>Claude Desktop ve Claude Code entegrasyonu. Dogal dil ile tum DevKit ozelliklerine erisim.</p></div>
+<div class="card"><h4>⚡ API Backend</h4><p>localhost:5199 uzerinden calisan .NET 9 Kestrel API. Tum islemlerin merkezi.</p></div>
+<div class="card"><h4>📦 npm Package</h4><p>devkit-mcp-server olarak npm'de yayinlanmis. Global kurulum ile aninda kullanima hazir.</p></div>
+</div>
+
+<h2>Hizli Baslangic</h2>
+<pre><code># 1. UI'yi baslat
+cd src/DevKit/ClientApp
+npm install
+npm run dev
+
+# 2. Tarayicida ac
+http://localhost:5173
+
+# 3. MCP entegrasyonu (opsiyonel)
+npm install -g devkit-mcp-server
+devkit-mcp-server --setup-all</code></pre>
+`,
+
+            quickstart: `
+<h1>Hizli Baslangic</h1>
+<h2>Adim 1: Backend (zaten calisiyor)</h2>
+<pre><code>cd src/DevKit
+dotnet run</code></pre>
+<p>Backend <code>http://localhost:5199</code> uzerinde calisiyor. Bu sayfayi goruyorsaniz hazir.</p>
+
+<h2>Adim 2: UI'yi Baslat</h2>
+<pre><code>cd src/DevKit/ClientApp
+npm install    # ilk seferlik
+npm run dev</code></pre>
+<p>UI <code>http://localhost:5173</code> uzerinde acilir.</p>
+
+<h2>Adim 3: MCP Entegrasyonu (Opsiyonel)</h2>
+<pre><code># npm global kurulum
+npm install -g devkit-mcp-server
+
+# Claude Desktop + Claude Code otomatik kurulum
+devkit-mcp-server --setup-all
+
+# Sadece Claude Desktop
+devkit-mcp-server --setup
+
+# Sadece Claude Code
+devkit-mcp-server --setup-code</code></pre>
+
+<div class="callout success"><span class="icon">✅</span><div><strong>Hazir!</strong> Artik UI'dan veya Claude'dan DevKit'i kullanabilirsiniz.</div></div>
+`,
+
+            architecture: `
+<h1>Mimari Yapi</h1>
+<p>DevKit 3 katmandan olusur:</p>
+<h3>.NET 9 Backend (API)</h3>
+<p>Kestrel uzerinde calisan REST API. Tum islemlerin merkezi. Controllers + Services + Models yapisiyla clean architecture.</p>
+<h3>React Frontend (UI)</h3>
+<p>Vite + React + TypeScript + Tailwind CSS. 15 sayfa, dark theme. Backend ile HTTP uzerinden iletisim kurar.</p>
+<h3>MCP Server (npm)</h3>
+<p>Node.js tabanli Model Context Protocol server. Claude Desktop ve Claude Code ile entegre olur. 84+ tool icerir.</p>
+`,
+
+            'ui-setup': `
+<h1>UI Kurulumu</h1>
+<h2>Gereksinimler</h2>
+<ul>
+<li>Node.js 18+ (LTS)</li>
+<li>npm 9+</li>
+</ul>
+
+<h2>Kurulum</h2>
+<pre><code>cd src/DevKit/ClientApp
+npm install
+npm run dev</code></pre>
+
+<h2>Production Build</h2>
+<pre><code>npm run build</code></pre>
+
+<h2>Sayfalar</h2>
+<table>
+<tr><th>Sayfa</th><th>Yol</th><th>Aciklama</th></tr>
+<tr><td>Dashboard</td><td>/</td><td>Genel bakis</td></tr>
+<tr><td>Architect</td><td>/architect</td><td>Gorsel mimari tasarim</td></tr>
+<tr><td>Scaffold</td><td>/scaffold</td><td>Proje iskeleti olusturma</td></tr>
+<tr><td>File Import</td><td>/import</td><td>AI dosya aktarimi</td></tr>
+<tr><td>Git</td><td>/git</td><td>Git yonetimi</td></tr>
+<tr><td>Docker</td><td>/docker</td><td>Docker Compose yonetimi</td></tr>
+<tr><td>Schema</td><td>/schema</td><td>DB sema goruntuleme</td></tr>
+<tr><td>API Test</td><td>/apitest</td><td>Swagger API test</td></tr>
+<tr><td>Packages</td><td>/audit</td><td>Paket denetimi</td></tr>
+<tr><td>Env Compare</td><td>/envcompare</td><td>Ortam karsilastirma</td></tr>
+<tr><td>Logs</td><td>/logs</td><td>Log goruntuleme</td></tr>
+<tr><td>Migrations</td><td>/migrations</td><td>DB migration yonetimi</td></tr>
+<tr><td>Crypto</td><td>/crypto</td><td>Sifreleme araclari</td></tr>
+<tr><td>Azure</td><td>/azure</td><td>Azure yonetimi</td></tr>
+<tr><td>Profiles</td><td>/profile</td><td>Profil yonetimi</td></tr>
+</table>
+`,
+
+            'mcp-claude-desktop': `
+<h1>Claude Desktop MCP Entegrasyonu</h1>
+<h2>Kurulum</h2>
+<pre><code>npm install -g devkit-mcp-server
+devkit-mcp-server --setup</code></pre>
+<p>Bu komut Claude Desktop config dosyasina DevKit MCP server'i otomatik ekler.</p>
+
+<h2>Manuel Kurulum</h2>
+<p><code>%APPDATA%\\Claude\\claude_desktop_config.json</code> dosyasina ekleyin:</p>
+<pre><code>{
+      "mcpServers": {
+        "devkit": {
+          "command": "devkit-mcp-server",
+          "env": {
+            "DEVKIT_URL": "http://localhost:5199"
+          }
+        }
+      }
+}</code></pre>
+<div class="callout warn"><span class="icon">⚠️</span><div>DevKit backend'inin calisiyor olmasi gerekir (<code>dotnet run</code>).</div></div>
+`,
+
+            'mcp-claude-code': `
+<h1>Claude Code MCP Entegrasyonu</h1>
+<h2>Otomatik Kurulum</h2>
+<pre><code>npm install -g devkit-mcp-server
+devkit-mcp-server --setup-code</code></pre>
+
+<h2>Manuel Kurulum</h2>
+<pre><code>claude mcp add --scope user devkit -e DEVKIT_URL=http://localhost:5199 -- devkit-mcp-server</code></pre>
+
+<h2>Dogrulama</h2>
+<pre><code>claude mcp list</code></pre>
+`,
+
+            'feat-architect': `
+<h1>Architecture Designer</h1>
+<p>Gorsel surekle-birak mimari tasarim araci. Projeleri, altyapilari, baglantilari tanimlayin, manifest ve docker-compose olusturun, tek tusa scaffold edin.</p>
+<h3>Ozellikler</h3>
+<ul>
+<li>27 component tipi (7 proje + 5 DB + 3 messaging + 8 observability + 3 gateway + 1 CI/CD)</li>
+<li>Smart default config'ler (her component zengin varsayilanlarla gelir)</li>
+<li>Dil bazli akilli baglanti kontrolu (.NET ↔ .NET, JS ↔ JS, capraz referans engellenir)</li>
+<li>Docker vs Mevcut Servis toggle (infrastructure componentler icin)</li>
+<li>Coklu baglanti modu (tip sec, art arda tikla, ESC ile bitir)</li>
+<li>Sirali islem akisi: Dogrula → Manifest → Docker</li>
+<li>Detayli validasyon (duplicate isim, port cakismasi, eksik alan)</li>
+<li>Manifest JSON edit edilebilir, sonra Scaffold Et</li>
+<li>Docker YAML edit edilebilir, sonra Diske Kaydet</li>
+<li>Scaffold sonrasi otomatik profil olusturma</li>
+<li>Bezier egrili baglanti cizgileri + ok isaretleri</li>
+<li>Component boyut degistirme (resize handle)</li>
+<li>Dosya secici ile yukle/kaydet</li>
+</ul>
+`,
+
+            'feat-scaffold': `
+<h1>Project Scaffolding</h1>
+<p>JSON manifest'ten proje iskeleti olusturur. .NET, Next.js, Node.js, Python destekler.</p>
+<h3>Desteklenen Frameworkler</h3>
+<ul>
+<li><strong>.NET:</strong> Solution + csproj + NuGet + Project Reference + klasor yapisi</li>
+<li><strong>Next.js:</strong> package.json + tsconfig + tailwind + layout/page</li>
+<li><strong>Node.js:</strong> package.json + tsconfig + src yapisi</li>
+<li><strong>Python:</strong> pyproject.toml + src yapisi</li>
+</ul>
+`,
+
+            'feat-import': `<h1>AI File Import</h1><p>Claude'un olusturdugu dosyalari projeye aktarir. Dosya yolu ve icerigi belirtilir, DevKit dosyayi diske yazar.</p>`,
+            'feat-git': `<h1>Git Management</h1><p>19 git islemi: branch, commit, push, pull, merge, stash, log, diff, revert, cherry-pick, tag ve daha fazlasi.</p>`,
+            'feat-docker': `<h1>Docker Compose Manager</h1><p>11 servis template'i ile docker-compose.yml olusturma, compose up/down/ps/logs/build/restart/pull komutlari.</p>`,
+            'feat-schema': `<h1>DB Schema Visualizer</h1><p>PostgreSQL veritabani semasini tarar: tablolar, kolonlar, indexler, FK, constraint'ler, trigger'lar, CREATE script'leri.</p>`,
+            'feat-apitest': `<h1>API Test Runner</h1><p>Swagger/OpenAPI dosyalarindan endpoint'leri parse eder, HTTP request gonderir, response goruntulenir.</p>`,
+            'feat-audit': `<h1>Package Auditor</h1><p>NuGet, npm, pip bagimlilik tarayici. Guncel olmayan paketleri, guvenlik aciklariini tespit eder.</p>`,
+            'feat-env': `<h1>Environment Config Comparator</h1><p>appsettings.json dosyalarini ortamlar arasi karsilastirir (Development vs Production).</p>`,
+            'feat-logs': `<h1>Log Viewer</h1><p>Yapilandirilmis log dosyalarini parse eder, seviye filtreleme (Info/Warn/Error), arama.</p>`,
+            'feat-migration': `<h1>Migration Manager</h1><p>SQL migration dosyalari versiyonlama, uygulama (apply), geri alma (rollback).</p>`,
+            'feat-projmgmt': `<h1>Project Management</h1><p>NuGet paket kurulum/kaldirma, project reference ekleme/cikarma, git diff/revert islemleri.</p>`,
+            'feat-crypto': `<h1>Crypto & Credentials</h1><p>AES sifreleme/cozme. Hassas bilgileri (connection string, API key) sifreli saklar.</p>`,
+            'feat-azure': `<h1>Azure Management</h1><p>Azure App Service, Resource Group listeleme, deployment, log stream.</p>`,
+            'feat-profiles': `<h1>Profil Sistemi</h1><p>Proje profilleri: workspace path, framework, Azure config. Aktif profil tum islemlerde kullanilir.</p>`,
+
+            'mcp-arch': `
+<h1>MCP: Mimari Tasarim Ornekleri</h1>
+<h3>Yeni tasarim olustur</h3>
+<pre><code>"ECommerce icin clean architecture tasarimi olustur, output C:\\source\\ecommerce"</code></pre>
+
+<h3>Component ekle</h3>
+<pre><code>"Api, Domain, Application, Infrastructure class library ekle"
+"PostgreSQL ve Redis ekle, Redis mevcut servis olsun host 192.168.1.10"
+"Kafka ve Elasticsearch ekle"
+"Next.js frontend ekle"</code></pre>
+
+<h3>Baglanti kur</h3>
+<pre><code>"Api'yi Application ve Infrastructure'a project reference ekle"
+"Application'i Domain'e bagla"
+"Infrastructure PostgreSQL ve Redis kullaniyor olarak bagla"
+"Api Kafka'ya publish etsin, Worker Kafka'dan consume etsin"</code></pre>
+
+<h3>Dogrula ve olustur</h3>
+<pre><code>"tasarimi dogrula"
+"manifest olustur ve scaffold et"
+"docker compose olustur ve diske kaydet"</code></pre>
+`,
+
+            'mcp-scaffold': `
+<h1>MCP: Proje Olusturma Ornekleri</h1>
+<pre><code>"clean architecture .NET projesi olustur, adi OrderService"
+"mevcut projeye yeni bir Worker Service ekle"
+"Next.js frontend projesi olustur, Tailwind ve Zustand ile"</code></pre>
+`,
+
+            'mcp-dev': `
+<h1>MCP: Gelistirme Akisi Ornekleri</h1>
+<h3>Profil ve tarama</h3>
+<pre><code>"aktif profili goster"
+"projeyi tara ve yapisini ozetle"
+"src/Controllers/OrderController.cs dosyasini oku"</code></pre>
+
+<h3>Dosya olusturma</h3>
+<pre><code>"OrderService.cs olustur ve src/Services altina koy"
+"appsettings.json'a Redis connection string ekle"</code></pre>
+
+<h3>Paket yonetimi</h3>
+<pre><code>"Api projesine MediatR paketini kur"
+"tum projelere Serilog ekle"
+"Infrastructure'dan eski paketi kaldir"</code></pre>
+
+<h3>Project reference</h3>
+<pre><code>"Api projesine Domain'i referans ekle"
+"bu projenin referanslarini listele"</code></pre>
+`,
+
+            'mcp-git': `
+<h1>MCP: Git Islemleri Ornekleri</h1>
+<pre><code>"degisen dosyalari goster"
+"feature/order-service branch'i olustur ve gec"
+"tum degisiklikleri commitle: Order service eklendi"
+"son 10 commit'i goster"
+"OrderController.cs'in diff'ini goster"
+"bu dosyayi eski haline dondur"
+"degisikligi kabul et ve stage et"
+"develop branch'ine merge et"
+"stash yap"</code></pre>
+`,
+
+            'mcp-docker': `
+<h1>MCP: Docker Islemleri Ornekleri</h1>
+<pre><code>"PostgreSQL, Redis, Kafka ile docker-compose olustur"
+"docker compose up calistir"
+"calisan container'lari goster"
+"kafka servisinin loglarini goster"
+"tum servisleri durdur"
+"docker compose down -v calistir"</code></pre>
+`,
+
+            'mcp-db': `
+<h1>MCP: Veritabani Islemleri Ornekleri</h1>
+<pre><code>"PostgreSQL semasini tara"
+"orders tablosunun detaylarini goster"
+"CREATE TABLE script'ini olustur"
+"yeni migration olustur: AddPaymentTable"
+"son migration'i uygula"
+"migration'i geri al"</code></pre>
+`,
+
+            'mcp-all': `
+<h1>Tum MCP Komutlari (84+ Tool)</h1>
+<h3>Profil (5)</h3>
+<pre><code>devkit_get_profiles, devkit_get_active_profile, devkit_set_active_profile, devkit_save_profile, devkit_delete_profile</code></pre>
+
+<h3>Scaffold (1)</h3>
+<pre><code>devkit_scaffold_project</code></pre>
+
+<h3>File Import (2)</h3>
+<pre><code>devkit_import_file, devkit_read_file</code></pre>
+
+<h3>Git (19)</h3>
+<pre><code>devkit_git_status, devkit_git_log, devkit_git_branch_list, devkit_git_branch_create, devkit_git_branch_switch, devkit_git_branch_delete, devkit_git_commit, devkit_git_push, devkit_git_pull, devkit_git_merge, devkit_git_stash, devkit_git_stash_pop, devkit_git_tag, devkit_git_remote, devkit_git_diff, devkit_git_cherry_pick, devkit_git_reset, devkit_git_clone, devkit_git_init</code></pre>
+
+<h3>Docker (8)</h3>
+<pre><code>devkit_docker_services, devkit_docker_generate, devkit_docker_save, devkit_docker_up, devkit_docker_down, devkit_docker_ps, devkit_docker_logs, devkit_docker_command</code></pre>
+
+<h3>Azure (7)</h3>
+<pre><code>devkit_azure_groups, devkit_azure_apps, devkit_azure_app_settings, devkit_azure_deploy, devkit_azure_logs, devkit_azure_restart, devkit_azure_status</code></pre>
+
+<h3>Crypto (2)</h3>
+<pre><code>devkit_encrypt, devkit_decrypt</code></pre>
+
+<h3>Scan (3)</h3>
+<pre><code>devkit_scan_project, devkit_scan_tree, devkit_read_file</code></pre>
+
+<h3>Context Bridge (1)</h3>
+<pre><code>devkit_load_last_context</code></pre>
+
+<h3>Schema (3)</h3>
+<pre><code>devkit_schema_scan, devkit_schema_table, devkit_schema_script</code></pre>
+
+<h3>API Test (2)</h3>
+<pre><code>devkit_apitest_parse, devkit_apitest_send</code></pre>
+
+<h3>Package Audit (1)</h3>
+<pre><code>devkit_package_audit</code></pre>
+
+<h3>Env Compare (1)</h3>
+<pre><code>devkit_env_compare</code></pre>
+
+<h3>Log Viewer (2)</h3>
+<pre><code>devkit_log_parse, devkit_log_search</code></pre>
+
+<h3>Migration (4)</h3>
+<pre><code>devkit_migration_list, devkit_migration_create, devkit_migration_apply, devkit_migration_rollback</code></pre>
+
+<h3>Project Management (11)</h3>
+<pre><code>devkit_package_add, devkit_package_remove, devkit_package_add_all, devkit_reference_add, devkit_reference_remove, devkit_reference_list, devkit_diff_files, devkit_diff_compare, devkit_diff_revert, devkit_diff_accept</code></pre>
+
+<h3>Architecture Designer (14)</h3>
+<pre><code>devkit_arch_create, devkit_arch_add_component, devkit_arch_remove_component, devkit_arch_add_connection, devkit_arch_remove_connection, devkit_arch_validate, devkit_arch_to_manifest, devkit_arch_scaffold, devkit_arch_to_docker, devkit_arch_save_docker, devkit_arch_save, devkit_arch_load, devkit_arch_templates, devkit_arch_rename_solution</code></pre>
+`,
+
+            'feat-scanner': `
+<h1>Project Scanner</h1>
+<p>Mevcut projelerin yapisini tarar, analiz eder ve raporlar. Sifirdan baslamayan projelerde Claude'un proje yapisini anlamasi icin kritik bir ozelliktir.</p>
+
+<h3>Ne Yapar?</h3>
+<ul>
+<li>Klasor agacini cikarir (bin, obj, node_modules gibi gereksiz klasorler otomatik filtrelenir)</li>
+<li>Framework otomatik tespit edilir (.NET, Next.js, Node.js, Python, Go)</li>
+<li>Projeleri bulur: csproj, package.json dosyalarindan ad, tip, framework, dependency ve project reference bilgileri</li>
+<li>Teknolojileri tespit eder: Kafka, Redis, EF Core, MediatR, Serilog, Tailwind CSS, SignalR vb.</li>
+<li>Namespace'leri cikarir (C# dosyalarindan)</li>
+<li>Config dosyalarini okur: appsettings.json, csproj, package.json, Dockerfile, docker-compose.yml</li>
+<li>Kaynak dosyalari listeler ve kucuk C# dosyalarinin ilk 20 satirini okur</li>
+<li>Herhangi bir dosyanin tam icerigini modal'da goruntulemenizi saglar</li>
+</ul>
+
+<h3>UI Kullanimi</h3>
+<p>Scanner sayfasinda (<code>/scan</code>) proje root dizinini girin veya bos birakin (aktif profilin workspace'i kullanilir). Iki buton var:</p>
+<ul>
+<li><strong>Tam Tarama:</strong> Proje yapisini, dependency'leri, namespace'leri, teknolojileri, config ve kaynak dosyalarini tarar</li>
+<li><strong>Sadece Agac:</strong> Hafif versiyon, sadece klasor/dosya agaci ve ozet bilgiler</li>
+</ul>
+<p>Tarama sonucunda dosya listesinde herhangi bir dosyanin uzerine gelin, goz ikonuna tiklayin, dosya icerigi modal'da acilir.</p>
+
+<h3>Mevcut Projelerde Calisma Akisi</h3>
+<p>Claude ile mevcut bir projede calisirken su akisi izleyin:</p>
+<pre><code>1. Profil olustur → workspace olarak mevcut proje dizinini goster
+2. Projeyi tara → Claude tum yapiyi ogrenir
+3. Kodlamaya basla → Claude dogru DEVKIT_PATH marker'lari uretir
+4. Dosya okuma → Claude mevcut kodu gorup ustune calisir</code></pre>
+
+<h3>MCP Ornek Cumleler</h3>
+<pre><code>"Projeyi tara"
+→ Aktif profilin workspace'ini tam tarar
+
+"Sadece klasor agacini goster"
+→ Hafif tarama, dosya icerigi yok
+
+"src/MyApp.Domain/Entities/Customer.cs dosyasini oku"
+→ Belirtilen dosyanin icerigini okur
+
+"Customer entity'sine Email property'si ekle ve import et"
+→ Claude mevcut kodu bilir, dogru DEVKIT_PATH ile gunceller</code></pre>
+`,
+
+            'feat-claude-bridge': `
+<h1>Claude Bridge (Claude'da Ac)</h1>
+<p>Scanner ve Architecture Designer sayfalarinda tarama veya tasarim sonuclarini tek tusa Claude Desktop'a aktarmanizi saglar.</p>
+
+<h3>Nasil Calisir?</h3>
+<p>Tarama veya tasarim tamamlandiktan sonra sonuc header'inda <strong>"Claude'da Ac"</strong> butonu gorunur. Butona basinca iki secenek sunulur:</p>
+
+<div class="grid-2">
+<div class="card"><h4>🔗 MCP Bridge</h4><p>Buyuk veriler icin. Context backend'e kaydedilir, clipboard'a tetikleyici prompt kopyalanir, Claude Desktop acilir. Claude <code>devkit_load_last_context</code> tool'unu cagirarak veriyi alir. 8KB ustu icin otomatik onerilir.</p></div>
+<div class="card"><h4>📋 Clipboard</h4><p>Kucuk veriler icin. Tum veri + prompt dogrudan clipboard'a kopyalanir, Claude Desktop acilir. Ctrl+V ile yapistirilir. Ekstra MCP cagrisina gerek yoktur.</p></div>
+</div>
+
+<h3>Kullanim Adimlari</h3>
+<pre><code>1. Scanner veya Architect sayfasinda islem yapin
+2. "Claude'da Ac" butonuna basin
+3. "MCP Bridge" veya "Clipboard" secin
+4. Claude Desktop acilir
+5. Ctrl+V + Enter
+6. Claude context'i yukler ve calismaya baslar</code></pre>
+
+<h3>Desteklenen Sayfalar</h3>
+<table>
+<tr><th>Sayfa</th><th>Context Tipi</th><th>Icerik</th></tr>
+<tr><td>Scanner</td><td>project-scan</td><td>Klasor agaci, projeler, dependency'ler, namespace'ler, teknolojiler</td></tr>
+<tr><td>Architect</td><td>architecture-design</td><td>Solution adi, projeler, baglantilar, altyapi, manifest (scaffold edildiyse)</td></tr>
+</table>
+
+<h3>MCP Tool</h3>
+<pre><code>"DevKit context'ini yukle"
+→ devkit_load_last_context tool'u cagrilir, son kaydedilen context yuklenir
+
+"DevKit'ten gelen veriyi incele"
+→ Ayni tool, context icerigini okur ve analiz eder</code></pre>
+
+<div class="callout info"><span class="icon">💡</span><div><strong>Ipucu:</strong> Architect sayfasinda scaffold ettikten sonra "Claude'da Ac" butonuna basarsaniz manifest dahil tum mimari context Claude'a aktarilir. Boylece dogrudan kodlamaya baslayabilirsiniz.</div></div>
+`,
+
+            'mcp-scanner': `
+<h1>MCP: Scanner & Claude Bridge Ornekleri</h1>
+
+<h3>Proje Tarama</h3>
+<pre><code>"Projeyi tara"
+→ Aktif profilin workspace'indeki projeyi tam tarar
+
+"C:\\source\\ecommerce dizinindeki projeyi tara"
+→ Belirtilen dizini tarar
+
+"Sadece klasor agacini goster"
+→ Hafif tarama, dosya icerikleri dahil edilmez</code></pre>
+
+<h3>Dosya Okuma</h3>
+<pre><code>"src/MyApp.Domain/Entities/Customer.cs dosyasini oku"
+→ Dosyanin tam icerigini doner
+
+"appsettings.json dosyasini oku"
+→ Config dosyasinin icerigini gosterir</code></pre>
+
+<h3>Mevcut Projede Gelistirme</h3>
+<pre><code>"Projeyi tara, yapisini ozetle"
+→ Claude proje yapisini ogrenir
+
+"Customer entity'sine Email ve Phone property'leri ekle"
+→ Claude mevcut Customer.cs'i bilir, DEVKIT_PATH ile gunceller
+
+"OrderController'a yeni bir GET endpoint ekle"
+→ Claude controller yapisini bilir, tutarli kod uretir</code></pre>
+
+<h3>Context Bridge</h3>
+<pre><code>"DevKit context'ini yukle"
+→ UI'dan gonderilen son context'i yukler (scan sonucu veya mimari tasarim)
+
+"DevKit'ten gelen veriyi incele ve projeye kodlama yapmaya basla"
+→ Context yuklenir, Claude calismaya baslar</code></pre>
+
+<h3>Tam Akis Ornegi</h3>
+<pre><code>1. UI'da Scanner sayfasini ac, projeyi tara
+2. "Claude'da Ac" → MCP Bridge sec
+3. Claude Desktop'ta Ctrl+V + Enter
+4. Claude: "DevKit context'ini yukle" → proje yapisi yuklenir
+5. "Customer entity'sine CreatedAt ve UpdatedAt ekle ve import et"
+6. Claude dosyayi kodlar, devkit_import_file ile projeye yerlestirir
+7. "Commitle: entity audit fields eklendi"
+8. "Push yap"</code></pre>
+`
+        };
+
+        function showPage(id) {
+            document.getElementById('content').innerHTML = pages[id] || '<h1>Sayfa bulunamadi</h1>';
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event?.target?.classList.add('active');
+            document.getElementById('breadcrumb').textContent = event?.target?.textContent || id;
+            document.getElementById('content').scrollTop = 0;
+        }
+
+        function toggleSection(el) {
+            el.classList.toggle('collapsed');
+            el.nextElementSibling.classList.toggle('hidden');
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        function filterNav(query) {
+            const q = query.toLowerCase();
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+            if (!q) document.querySelectorAll('.nav-items').forEach(el => el.classList.remove('hidden'));
+        }
+
+        showPage('welcome');
+    </script>
+</body>
 </html>
