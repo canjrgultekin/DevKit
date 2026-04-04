@@ -75,7 +75,6 @@ app.MapControllers();
 // SPA fallback: API olmayan tum route'lari index.html'e yonlendir
 app.MapFallback(async context =>
 {
-    // API isteklerini atla (zaten MapControllers'ta yakalanir)
     if (context.Request.Path.StartsWithSegments("/api"))
     {
         context.Response.StatusCode = 404;
@@ -98,11 +97,20 @@ app.MapFallback(async context =>
 var profileManager = app.Services.GetRequiredService<ProfileManager>();
 profileManager.EnsureInitialized();
 
+// ═══ MCP Server Auto-Install ═══
+var markerPath = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".devkit-mcp-installed");
+
+if (args.Contains("--install") || !File.Exists(markerPath))
+{
+    await EnsureMcpServer();
+}
+
 var isToolInstall = Assembly.GetExecutingAssembly().Location.Contains(".dotnet");
 
 Console.WriteLine();
 Console.WriteLine("  ╔══════════════════════════════════════╗");
-Console.WriteLine("  ║           DevKit v2.0.0              ║");
+Console.WriteLine("  ║           DevKit v2.0.3              ║");
 Console.WriteLine("  ║   Developer Toolkit & AI Companion   ║");
 Console.WriteLine("  ╚══════════════════════════════════════╝");
 Console.WriteLine();
@@ -119,11 +127,143 @@ if (!args.Contains("--no-browser"))
 
 app.Run();
 
+// ═══ MCP SERVER AUTO-INSTALL ═══
+
+async Task EnsureMcpServer()
+{
+    try
+    {
+        // npm full path bul
+        var npmCmd = "npm";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var pathDirs = Environment.GetEnvironmentVariable("PATH")?.Split(';') ?? Array.Empty<string>();
+            var npmPath = pathDirs
+                .Select(d => Path.Combine(d, "npm.cmd"))
+                .FirstOrDefault(File.Exists);
+
+            npmPath ??= new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "nodejs", "npm.cmd"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "nodejs", "npm.cmd"),
+            }.FirstOrDefault(File.Exists);
+
+            npmCmd = npmPath ?? "npm.cmd";
+        }
+
+        // npm var mi?
+        var whichPsi = new ProcessStartInfo
+        {
+            FileName = npmCmd,
+            Arguments = "--version",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var whichProc = Process.Start(whichPsi);
+        if (whichProc == null) return;
+        await whichProc.WaitForExitAsync();
+        if (whichProc.ExitCode != 0) { Console.WriteLine("[DevKit] npm bulunamadi, MCP server atlaniyor."); return; }
+
+        // Kurulu mu kontrol et
+        var listPsi = new ProcessStartInfo
+        {
+            FileName = npmCmd,
+            Arguments = "list -g devkit-mcp-server --depth=0",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var listProc = Process.Start(listPsi);
+        if (listProc == null) return;
+        var listOutput = await listProc.StandardOutput.ReadToEndAsync();
+        await listProc.WaitForExitAsync();
+
+        var isInstalled = listOutput.Contains("devkit-mcp-server");
+
+        if (!isInstalled)
+        {
+            Console.WriteLine("[DevKit] devkit-mcp-server kuruluyor...");
+            var installProc = Process.Start(new ProcessStartInfo
+            {
+                FileName = npmCmd,
+                Arguments = "install -g devkit-mcp-server",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (installProc != null)
+            {
+                await installProc.WaitForExitAsync();
+                Console.WriteLine(installProc.ExitCode == 0
+                    ? "[DevKit] devkit-mcp-server kuruldu."
+                    : "[DevKit] devkit-mcp-server kurulum basarisiz.");
+            }
+        }
+        else
+        {
+            Console.WriteLine("[DevKit] devkit-mcp-server guncelleniyor...");
+            var updateProc = Process.Start(new ProcessStartInfo
+            {
+                FileName = npmCmd,
+                Arguments = "update -g devkit-mcp-server",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (updateProc != null)
+            {
+                await updateProc.WaitForExitAsync();
+                Console.WriteLine("[DevKit] devkit-mcp-server guncellendi.");
+            }
+        }
+
+        // Claude Desktop setup calistir (her zaman, mevcut connector'lari ezmez)
+        var mcpCmd = "devkit-mcp-server";
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var npmGlobalPrefix = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "npm");
+            var mcpPath = Path.Combine(npmGlobalPrefix, "devkit-mcp-server.cmd");
+            mcpCmd = File.Exists(mcpPath) ? mcpPath : "devkit-mcp-server.cmd";
+        }
+
+        var setupProc = Process.Start(new ProcessStartInfo
+        {
+            FileName = mcpCmd,
+            Arguments = "--setup",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        });
+        if (setupProc != null)
+        {
+            var setupOutput = await setupProc.StandardOutput.ReadToEndAsync();
+            await setupProc.WaitForExitAsync();
+            if (setupProc.ExitCode == 0)
+            {
+                Console.WriteLine("[DevKit] Claude Desktop config guncellendi.");
+                Console.WriteLine(setupOutput);
+            }
+        }
+
+        // Marker dosyasi yaz
+        await File.WriteAllTextAsync(markerPath, DateTime.UtcNow.ToString("o"));
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DevKit] MCP server kontrol hatasi: {ex.Message}");
+    }
+}
+
 // ═══ HELPERS ═══
 
 static string? FindWwwroot()
 {
-    // 1. Assembly dizini (dotnet tool install -g ile kuruldugunda)
     var assemblyDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     if (assemblyDir != null)
     {
@@ -132,18 +272,15 @@ static string? FindWwwroot()
             return Path.GetFullPath(asmPath);
     }
 
-    // 2. csproj dizini (dotnet run)
     var current = Directory.GetCurrentDirectory();
     var path1 = Path.Combine(current, "wwwroot");
     if (Directory.Exists(path1) && File.Exists(Path.Combine(path1, "index.html")))
         return Path.GetFullPath(path1);
 
-    // 3. bin/Debug/net9.0 altindan
     var path2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot");
     if (Directory.Exists(path2) && File.Exists(Path.Combine(path2, "index.html")))
         return Path.GetFullPath(path2);
 
-    // 4. Ust dizinlerde ara
     var dir = current;
     for (var i = 0; i < 5; i++)
     {
@@ -181,13 +318,10 @@ static string GetFallbackHtml() => """
     <p>Developer Toolkit & AI Companion</p>
     <br>
     <p><strong>Kurulum:</strong></p>
-    <div class="badge">dotnet tool install -g DevKit</div>
-    <div class="badge">npm i -g devkit-mcp-server</div>
-    <div class="badge">devkit-mcp-server --setup-all</div>
+    <div class="badge">dotnet tool update -g DevKit-Tool</div>
+    <div class="badge">devkit</div>
     <br><br>
-    <p><strong>UI icin:</strong></p>
-    <div class="badge">cd src/DevKit/ClientApp && npm run dev</div>
-    <p>Sonra <a href="http://localhost:5173">localhost:5173</a> adresini acin</p>
+    <p>Ilk calistirmada MCP server ve Claude Desktop otomatik konfig edilir.</p>
     </div></body></html>
     """;
 

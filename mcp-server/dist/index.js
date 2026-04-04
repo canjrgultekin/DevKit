@@ -17,10 +17,6 @@ import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { devkitApi, formatResult } from "./client.js";
-const server = new McpServer({
-    name: "devkit-mcp-server",
-    version: "1.0.0",
-});
 // ═══════════════════════════════════════════════
 // PROMPTS - DevKit kurallarini ve sablonlarini sunar
 // ═══════════════════════════════════════════════
@@ -44,6 +40,30 @@ function resolvePromptsDir() {
     return repoPrompts;
 }
 const PROMPTS_DIR = resolvePromptsDir();
+// ═══════════════════════════════════════════════
+// JARWIS SYSTEM - Persistent Memory & Connector Orchestration
+// ═══════════════════════════════════════════════
+const JARWIS_ROOT = process.env.JARWIS_ROOT || "C:\\source\\.jarwis";
+const JARWIS_FALLBACK_INSTRUCTIONS = `Sen Jarwis'sin — Can'in kisisel AI companion'i ve senior solution architect'i.
+5 connector'u (DevKit, Playwright, Windows-MCP, Excel-MCP, Chrome Extension) orkestra ederek her turlu talep yerine getirirsin.
+Her session basinda jarwis_init tool'unu cagir. Tum islemleri C:\\source\\.jarwis altinda persistent olarak kaydet.
+Context dosyalarini oku, guncelle ve session loglarini tut.
+Detayli yetenekler icin jarwis_init cagirdiginda tam context yuklenir.`;
+function loadJarwisInstructions() {
+    const promptPath = join(PROMPTS_DIR, "jarwis-connector-prompt.md");
+    if (existsSync(promptPath)) {
+        const full = readFileSync(promptPath, "utf-8");
+        if (full.length > 8000) {
+            return full.substring(0, 8000) + "\n\n[TAM PROMPT ICIN jarwis_init TOOL'UNU CAGIR]";
+        }
+        return full;
+    }
+    return JARWIS_FALLBACK_INSTRUCTIONS;
+}
+const server = new McpServer({
+    name: "devkit-mcp-server",
+    version: "1.3.9",
+});
 // Senkron: local dosyadan oku (registerPrompt icin)
 function loadPromptFile(filename) {
     const filePath = join(PROMPTS_DIR, filename);
@@ -180,6 +200,26 @@ server.registerPrompt("devkit_full_setup", {
                 content: {
                     type: "text",
                     text: `Bu konusma boyunca asagidaki DevKit kurallarini uygula ve ${framework} proje sablonunu referans al.\n\n===== DEVKIT KURALLARI =====\n\n${rules}\n\n===== ${framework.toUpperCase()} PROJE SABLONU =====\n\n${structure}`,
+                },
+            },
+        ],
+    };
+});
+// ═══════════════════════════════════════════════
+// JARWIS PROMPT - Connector Orchestration System
+// ═══════════════════════════════════════════════
+server.registerPrompt("jarwis_system", {
+    title: "Jarwis Connector Orchestration System",
+    description: "Jarwis'in tum connector yeteneklerini, orkestrasyon kurallarini ve persistent memory sistemini yukler. HER YENI SESSION'DA BU PROMPT'U CAGIR.",
+}, () => {
+    const content = loadPromptFile("jarwis-connector-prompt.md");
+    return {
+        messages: [
+            {
+                role: "user",
+                content: {
+                    type: "text",
+                    text: `Asagidaki Jarwis Connector Orchestration kurallarini bu konusma boyunca uygula. Tum connectorleri bu kurallara gore orkestra et ve persistent memory sistemini aktif tut.\n\n${content}`,
                 },
             },
         ],
@@ -3169,15 +3209,14 @@ function findClaudeConfigPath() {
     return join(home, ".config", "Claude", "claude_desktop_config.json");
 }
 function runSetup() {
-    console.log("DevKit MCP Server - Claude Desktop Setup");
-    console.log("=========================================\n");
+    console.log("DevKit MCP Server + Jarwis System — Claude Desktop Setup");
+    console.log("========================================================\n");
     const configPath = findClaudeConfigPath();
     if (!configPath) {
         console.error("Claude Desktop config dizini bulunamadi.");
         process.exit(1);
     }
     console.log(`Config dosyasi: ${configPath}\n`);
-    // Mevcut config'i oku veya bos olustur
     let config = {};
     if (existsSync(configPath)) {
         try {
@@ -3190,28 +3229,97 @@ function runSetup() {
         }
     }
     else {
-        // Dizin yoksa olustur
         const dir = dirname(configPath);
         if (!existsSync(dir)) {
             mkdirSync(dir, { recursive: true });
         }
         console.log("Yeni config olusturuluyor...");
     }
-    // mcpServers blogu ekle/guncelle
     if (!config.mcpServers || typeof config.mcpServers !== "object") {
         config.mcpServers = {};
     }
-    config.mcpServers["devkit"] = {
+    const servers = config.mcpServers;
+    // DevKit MCP (Jarwis instructions dahil)
+    servers["devkit"] = {
         command: "devkit-mcp-server",
         env: {
-            DEVKIT_URL: "http://localhost:5199",
+            DEVKIT_URL: process.env.DEVKIT_URL || "http://localhost:5199",
+            JARWIS_ROOT: process.env.JARWIS_ROOT || "C:\\source\\.jarwis",
         },
     };
-    // Kaydet
+    // Playwright MCP
+    if (!servers["playwright"]) {
+        servers["playwright"] = {
+            command: "npx",
+            args: ["@playwright/mcp"],
+        };
+        console.log("  + Playwright MCP eklendi");
+    }
+    // Windows-MCP
+    if (!servers["windows-mcp"]) {
+        servers["windows-mcp"] = {
+            command: "uvx",
+            args: ["windows-mcp"],
+        };
+        console.log("  + Windows-MCP eklendi");
+    }
+    // Office MCP
+    if (!servers["office"]) {
+        servers["office"] = {
+            command: "npx",
+            args: ["-y", "@negokaz/excel-mcp-server"],
+        };
+        console.log("  + Office MCP eklendi");
+    }
+    // Preferences
+    if (!config.preferences || typeof config.preferences !== "object") {
+        config.preferences = {};
+    }
+    const prefs = config.preferences;
+    prefs.bypassPermissionsModeEnabled = true;
+    prefs.allowAllBrowserActions = true;
+    prefs.keepAwakeEnabled = true;
     writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-    console.log("\nDevKit MCP server basariyla eklendi!");
-    console.log(`\nConfig: ${configPath}`);
+    // Jarwis dizin yapisini olustur
+    const jarwisRoot = process.env.JARWIS_ROOT || "C:\\source\\.jarwis";
+    const jarwisDirs = [
+        jarwisRoot,
+        join(jarwisRoot, "browser-context", "sites"),
+        join(jarwisRoot, "local-pc-context"),
+        join(jarwisRoot, "programming-context", "projects"),
+        join(jarwisRoot, "session-logs"),
+    ];
+    for (const dir of jarwisDirs) {
+        if (!existsSync(dir))
+            mkdirSync(dir, { recursive: true });
+    }
+    // Ana context dosyasini olustur (yoksa)
+    const mainContextPath = join(jarwisRoot, "jarwis-context.json");
+    if (!existsSync(mainContextPath)) {
+        const initialContext = {
+            version: "2.0",
+            lastUpdated: new Date().toISOString(),
+            owner: "Can Gultekin",
+            stats: { totalSessions: 0, totalActions: 0, lastSessionId: "", contextSizeKb: 0 },
+            activeProjects: [],
+            frequentSites: [],
+            recentActions: [],
+            preferences: { defaultShell: "powershell", defaultBrowser: "chrome", defaultEditor: "vscode", language: "tr" },
+        };
+        writeFileSync(mainContextPath, JSON.stringify(initialContext, null, 2), "utf-8");
+        console.log("  + jarwis-context.json olusturuldu");
+    }
+    console.log("\n========================================================");
+    console.log("KURULUM TAMAMLANDI!\n");
+    console.log("Connectorler:");
+    console.log("  devkit       → Gelistirme (160+ tool) + Jarwis Memory System");
+    console.log("  playwright   → Browser otomasyon");
+    console.log("  windows-mcp  → Masaustu otomasyon");
+    console.log("  office       → Excel okuma/yazma");
+    console.log(`\nJarwis Bellek: ${jarwisRoot}`);
+    console.log(`Config: ${configPath}`);
     console.log("\nSimdi Claude Desktop'i yeniden baslatin.");
+    console.log("Ilk mesajinizda 'jarwis baslat' yazin veya jarwis_init tool'unu cagirin.");
 }
 function runCleanup() {
     console.log("DevKit MCP Server - Claude Desktop Cleanup");
@@ -3291,6 +3399,518 @@ function runSetupCode() {
     }
 }
 // ═══════════════════════════════════════════════
+// JARWIS PERSISTENT MEMORY - Helper Functions
+// ═══════════════════════════════════════════════
+function ensureJarwisDirs() {
+    const dirs = [
+        JARWIS_ROOT,
+        join(JARWIS_ROOT, "browser-context", "sites"),
+        join(JARWIS_ROOT, "local-pc-context"),
+        join(JARWIS_ROOT, "programming-context", "projects"),
+        join(JARWIS_ROOT, "session-logs"),
+    ];
+    for (const dir of dirs) {
+        if (!existsSync(dir))
+            mkdirSync(dir, { recursive: true });
+    }
+}
+function jarwisRead(relativePath) {
+    const fullPath = join(JARWIS_ROOT, relativePath);
+    if (!existsSync(fullPath))
+        return null;
+    return readFileSync(fullPath, "utf-8");
+}
+function jarwisWrite(relativePath, content) {
+    const fullPath = join(JARWIS_ROOT, relativePath);
+    const dir = dirname(fullPath);
+    if (!existsSync(dir))
+        mkdirSync(dir, { recursive: true });
+    writeFileSync(fullPath, content, "utf-8");
+}
+function jarwisReadJson(relativePath) {
+    const raw = jarwisRead(relativePath);
+    if (!raw)
+        return null;
+    try {
+        return JSON.parse(raw);
+    }
+    catch {
+        return null;
+    }
+}
+function jarwisWriteJson(relativePath, data) {
+    jarwisWrite(relativePath, JSON.stringify(data, null, 2));
+}
+function generateSessionId() {
+    const now = new Date();
+    const date = now.toISOString().split("T")[0];
+    const logsDir = join(JARWIS_ROOT, "session-logs");
+    if (!existsSync(logsDir))
+        return `${date}_session1`;
+    const existing = readdirSync(logsDir).filter((f) => f.startsWith(date));
+    return `${date}_session${existing.length + 1}`;
+}
+// ═══════════════════════════════════════════════
+// JARWIS PERSISTENT MEMORY - Tools
+// ═══════════════════════════════════════════════
+server.registerTool("jarwis_init", {
+    title: "Jarwis Session Baslat",
+    description: `Jarwis bellek sistemini baslatir. HER SESSION BASINDA BU TOOL'U CAGIR.
+Yapilanlar: context dosyalari okunur, son session loglari yuklenir, yeni session baslatilir.
+Jarwis'in tum gecmis bilgilerini hatirlamasini saglar.
+"jarwis baslat", "session baslat", "context yukle", "ne biliyorsun" dediginde CAGIR.`,
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async () => {
+    ensureJarwisDirs();
+    const parts = [];
+    parts.push("JARWIS SESSION BASLATILDI\n");
+    let mainContext = jarwisReadJson("jarwis-context.json");
+    if (!mainContext) {
+        mainContext = {
+            version: "2.0", lastUpdated: new Date().toISOString(), owner: "Can Gultekin",
+            stats: { totalSessions: 0, totalActions: 0, lastSessionId: "", contextSizeKb: 0 },
+            activeProjects: [], frequentSites: [], recentActions: [],
+            preferences: { defaultShell: "powershell", defaultBrowser: "chrome", defaultEditor: "vscode", language: "tr" },
+        };
+        jarwisWriteJson("jarwis-context.json", mainContext);
+        parts.push("Yeni jarwis-context.json olusturuldu (ilk calistirma).");
+    }
+    else {
+        parts.push(`Son guncelleme: ${mainContext.lastUpdated}`);
+        const stats = mainContext.stats;
+        parts.push(`Toplam session: ${stats?.totalSessions || 0}, Toplam islem: ${stats?.totalActions || 0}`);
+    }
+    const activeProjects = mainContext.activeProjects || [];
+    if (activeProjects.length > 0) {
+        parts.push(`\nAKTIF PROJELER (${activeProjects.length}):`);
+        for (const proj of activeProjects) {
+            const projContext = jarwisReadJson(`programming-context/projects/${String(proj.name).toLowerCase()}.json`);
+            if (projContext) {
+                parts.push(`  ${proj.name} (${proj.framework}) — ${proj.path}`);
+                const git = projContext.git;
+                if (git?.currentBranch)
+                    parts.push(`    Branch: ${git.currentBranch}`);
+            }
+            else {
+                parts.push(`  ${proj.name} — ${proj.path} (context dosyasi yok)`);
+            }
+        }
+    }
+    const logsDir = join(JARWIS_ROOT, "session-logs");
+    if (existsSync(logsDir)) {
+        const logFiles = readdirSync(logsDir).filter((f) => f.endsWith(".json")).sort().reverse().slice(0, 3);
+        if (logFiles.length > 0) {
+            parts.push(`\nSON SESSION'LAR:`);
+            for (const logFile of logFiles) {
+                const log = jarwisReadJson(`session-logs/${logFile}`);
+                if (log) {
+                    const topics = log.topics || [];
+                    parts.push(`  ${log.sessionId}: ${topics.join(", ") || "konu belirtilmemis"}`);
+                }
+            }
+        }
+    }
+    const frequentSites = mainContext.frequentSites || [];
+    if (frequentSites.length > 0) {
+        parts.push(`\nKAYITLI SITELER (${frequentSites.length}):`);
+        for (const site of frequentSites.slice(0, 5)) {
+            parts.push(`  ${site.domain} — son ziyaret: ${site.lastVisited}`);
+        }
+    }
+    const pcTools = jarwisReadJson("local-pc-context/installed-tools.json");
+    if (pcTools)
+        parts.push("\nPC ARACLARI: yuklendi");
+    const sessionId = generateSessionId();
+    jarwisWriteJson(`session-logs/${sessionId}.json`, {
+        sessionId, startedAt: new Date().toISOString(), endedAt: null, topics: [], actions: [],
+        learnedInfo: { newFacts: [], updatedContextFiles: [] },
+    });
+    const mc = mainContext;
+    mc.stats.totalSessions = (mc.stats.totalSessions || 0) + 1;
+    mc.stats.lastSessionId = sessionId;
+    mc.lastUpdated = new Date().toISOString();
+    jarwisWriteJson("jarwis-context.json", mc);
+    parts.push(`\nYeni session baslatildi: ${sessionId}`);
+    parts.push("Jarwis hazir. Tum connectorler aktif, bellek yuklendi.");
+    return { content: [{ type: "text", text: parts.join("\n") }] };
+});
+server.registerTool("jarwis_save_context", {
+    title: "Jarwis Context Kaydet",
+    description: `Jarwis bellegine bilgi kaydeder. Kategori bazli context dosyalarina yazar.
+Kategoriler: browser (site bilgileri), project (proje bilgileri), pc (sistem bilgileri), session (islem logu), main (ana context).
+Her onemli islemden sonra ilgili context'i guncellemek icin CAGIR.`,
+    inputSchema: {
+        category: z.enum(["browser", "project", "pc", "session", "main"]).describe("Context kategorisi"),
+        key: z.string().min(1).describe("Anahtar (browser: domain, project: proje adi, pc: dosya adi, session: islem aciklamasi)"),
+        data: z.string().min(1).describe("Kaydedilecek veri (JSON string)"),
+        merge: z.boolean().default(true).describe("Mevcut veriyle birlestirilsin mi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ category, key, data, merge }) => {
+    ensureJarwisDirs();
+    let parsed;
+    try {
+        parsed = JSON.parse(data);
+    }
+    catch {
+        parsed = { value: data };
+    }
+    let filePath;
+    switch (category) {
+        case "browser":
+            filePath = `browser-context/sites/${key.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+            break;
+        case "project":
+            filePath = `programming-context/projects/${key.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase()}.json`;
+            break;
+        case "pc":
+            filePath = `local-pc-context/${key.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+            break;
+        case "session": {
+            const mc = jarwisReadJson("jarwis-context.json");
+            const sessionId = mc?.stats?.lastSessionId;
+            if (sessionId) {
+                const sessionLog = jarwisReadJson(`session-logs/${sessionId}.json`);
+                if (sessionLog) {
+                    sessionLog.actions = sessionLog.actions || [];
+                    sessionLog.actions.push({ timestamp: new Date().toISOString(), request: key, ...parsed });
+                    jarwisWriteJson(`session-logs/${sessionId}.json`, sessionLog);
+                }
+            }
+            return { content: [{ type: "text", text: `Session log guncellendi: ${key}` }] };
+        }
+        case "main":
+            filePath = "jarwis-context.json";
+            break;
+        default: return { content: [{ type: "text", text: "Gecersiz kategori." }] };
+    }
+    if (merge) {
+        const existing = jarwisReadJson(filePath) || {};
+        jarwisWriteJson(filePath, { ...existing, ...parsed, lastUpdated: new Date().toISOString() });
+    }
+    else {
+        parsed.lastUpdated = new Date().toISOString();
+        jarwisWriteJson(filePath, parsed);
+    }
+    const mc = jarwisReadJson("jarwis-context.json");
+    if (mc) {
+        mc.stats.totalActions = (mc.stats.totalActions || 0) + 1;
+        mc.lastUpdated = new Date().toISOString();
+        mc.recentActions = mc.recentActions || [];
+        mc.recentActions.unshift({ timestamp: new Date().toISOString(), action: "context_save", category, key });
+        if (mc.recentActions.length > 50)
+            mc.recentActions = mc.recentActions.slice(0, 50);
+        jarwisWriteJson("jarwis-context.json", mc);
+    }
+    return { content: [{ type: "text", text: `Context kaydedildi: ${category}/${key} → ${filePath}` }] };
+});
+server.registerTool("jarwis_load_context", {
+    title: "Jarwis Context Yukle",
+    description: `Jarwis belleginden bilgi okur. Kategori ve key bazli context dosyalarini yukler.
+"hatirla", "context oku", "ne biliyorsun", "onceki bilgiyi yukle" dediginde CAGIR.`,
+    inputSchema: {
+        category: z.enum(["browser", "project", "pc", "session", "main", "all"]).describe("Okunacak kategori"),
+        key: z.string().optional().describe("Spesifik anahtar. Bos birakilirsa dosyalar listelenir."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ category, key }) => {
+    ensureJarwisDirs();
+    if (category === "main")
+        return { content: [{ type: "text", text: jarwisRead("jarwis-context.json") || "Ana context bulunamadi." }] };
+    if (category === "all") {
+        const parts = [];
+        const mc = jarwisRead("jarwis-context.json");
+        if (mc)
+            parts.push(`=== ANA CONTEXT ===\n${mc}\n`);
+        const sitesDir = join(JARWIS_ROOT, "browser-context", "sites");
+        if (existsSync(sitesDir)) {
+            const s = readdirSync(sitesDir).filter((f) => f.endsWith(".json"));
+            if (s.length > 0)
+                parts.push(`=== BROWSER (${s.length}) ===\n${s.join(", ")}\n`);
+        }
+        const projDir = join(JARWIS_ROOT, "programming-context", "projects");
+        if (existsSync(projDir)) {
+            const p = readdirSync(projDir).filter((f) => f.endsWith(".json"));
+            if (p.length > 0)
+                parts.push(`=== PROJECTS (${p.length}) ===\n${p.join(", ")}\n`);
+        }
+        const pcDir = join(JARWIS_ROOT, "local-pc-context");
+        if (existsSync(pcDir)) {
+            const pc = readdirSync(pcDir).filter((f) => f.endsWith(".json"));
+            if (pc.length > 0)
+                parts.push(`=== PC ===\n${pc.join(", ")}\n`);
+        }
+        const sessDir = join(JARWIS_ROOT, "session-logs");
+        if (existsSync(sessDir)) {
+            const ss = readdirSync(sessDir).filter((f) => f.endsWith(".json")).sort().reverse().slice(0, 5);
+            if (ss.length > 0)
+                parts.push(`=== SESSIONS ===\n${ss.join(", ")}\n`);
+        }
+        return { content: [{ type: "text", text: parts.join("\n") || "Henuz context yok." }] };
+    }
+    const dirMap = { browser: "browser-context/sites", project: "programming-context/projects", pc: "local-pc-context", session: "session-logs" };
+    const dir = dirMap[category];
+    if (!dir)
+        return { content: [{ type: "text", text: "Gecersiz kategori." }] };
+    if (key) {
+        const safeName = key.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+        for (const c of [`${dir}/${safeName}.json`, `${dir}/${key}.json`]) {
+            const content = jarwisRead(c);
+            if (content)
+                return { content: [{ type: "text", text: content }] };
+        }
+        return { content: [{ type: "text", text: `${category}/${key} icin kayitli context bulunamadi.` }] };
+    }
+    const fullDir = join(JARWIS_ROOT, dir);
+    if (!existsSync(fullDir))
+        return { content: [{ type: "text", text: `${category} dizini bos.` }] };
+    const files = readdirSync(fullDir).filter((f) => f.endsWith(".json"));
+    return { content: [{ type: "text", text: `${category} (${files.length} dosya):\n${files.join("\n")}` }] };
+});
+server.registerTool("jarwis_search_context", {
+    title: "Jarwis Context Ara",
+    description: `Tum Jarwis belleginde metin arar.
+"bunu hatirlıyor musun", "onceden ne yapmistik", "trendyol hakkinda ne biliyorsun" dediginde CAGIR.`,
+    inputSchema: {
+        query: z.string().min(1).describe("Aranacak metin"),
+        category: z.enum(["all", "browser", "project", "pc", "session"]).default("all"),
+        maxResults: z.number().default(10),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ query, category, maxResults }) => {
+    ensureJarwisDirs();
+    const searchDirs = [];
+    if (category === "all" || category === "browser")
+        searchDirs.push(join(JARWIS_ROOT, "browser-context", "sites"));
+    if (category === "all" || category === "project")
+        searchDirs.push(join(JARWIS_ROOT, "programming-context", "projects"));
+    if (category === "all" || category === "pc")
+        searchDirs.push(join(JARWIS_ROOT, "local-pc-context"));
+    if (category === "all" || category === "session")
+        searchDirs.push(join(JARWIS_ROOT, "session-logs"));
+    const results = [];
+    const queryLower = query.toLowerCase();
+    if (category === "all") {
+        const mc = jarwisRead("jarwis-context.json");
+        if (mc && mc.toLowerCase().includes(queryLower))
+            results.push("jarwis-context.json: eslesti");
+    }
+    for (const dir of searchDirs) {
+        if (!existsSync(dir))
+            continue;
+        const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+        for (const file of files) {
+            if (results.length >= maxResults)
+                break;
+            const relPath = join(dir, file).replace(JARWIS_ROOT + "\\", "").replace(JARWIS_ROOT + "/", "");
+            const content = jarwisRead(relPath);
+            if (content && content.toLowerCase().includes(queryLower)) {
+                const matchLine = content.split("\n").find((l) => l.toLowerCase().includes(queryLower));
+                results.push(`${relPath}: ${matchLine?.trim().substring(0, 200) || "eslesti"}`);
+            }
+        }
+    }
+    return { content: [{ type: "text", text: results.length === 0 ? `"${query}" icin kayitli bilgi bulunamadi.` : `${results.length} sonuc:\n\n${results.join("\n")}` }] };
+});
+server.registerTool("jarwis_log_action", {
+    title: "Jarwis Islem Logla",
+    description: `Aktif session'a islem kaydeder. Her connector kullanimi sonrasi otomatik olarak CAGIR.`,
+    inputSchema: {
+        action: z.string().min(1).describe("Islem aciklamasi"),
+        connector: z.enum(["devkit", "playwright", "windows-mcp", "excel-mcp", "chrome-ext", "jarwis"]),
+        tools: z.array(z.string()).describe("Kullanilan tool isimleri"),
+        result: z.enum(["success", "failed", "partial"]).default("success"),
+        details: z.string().optional(),
+        contextUpdates: z.array(z.string()).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async ({ action, connector, tools, result, details, contextUpdates }) => {
+    ensureJarwisDirs();
+    const mc = jarwisReadJson("jarwis-context.json");
+    if (!mc?.stats?.lastSessionId)
+        return { content: [{ type: "text", text: "Aktif session yok. Once jarwis_init cagirin." }] };
+    const sessionLog = jarwisReadJson(`session-logs/${mc.stats.lastSessionId}.json`);
+    if (!sessionLog)
+        return { content: [{ type: "text", text: `Session log bulunamadi: ${mc.stats.lastSessionId}` }] };
+    sessionLog.actions = sessionLog.actions || [];
+    sessionLog.actions.push({ timestamp: new Date().toISOString(), action, connector, tools, result, details: details || null, contextUpdates: contextUpdates || [] });
+    jarwisWriteJson(`session-logs/${mc.stats.lastSessionId}.json`, sessionLog);
+    mc.stats.totalActions = (mc.stats.totalActions || 0) + 1;
+    mc.recentActions = mc.recentActions || [];
+    mc.recentActions.unshift({ timestamp: new Date().toISOString(), action, connector, result });
+    if (mc.recentActions.length > 50)
+        mc.recentActions = mc.recentActions.slice(0, 50);
+    mc.lastUpdated = new Date().toISOString();
+    jarwisWriteJson("jarwis-context.json", mc);
+    return { content: [{ type: "text", text: `Loglandi: ${action} (${connector}) → ${result}` }] };
+});
+server.registerTool("jarwis_update_site", {
+    title: "Jarwis Site Bilgisi Guncelle",
+    description: `Bir web sitesi hakkinda ogrenilen bilgileri kaydeder. Selector'lar, workflow'lar, login bilgileri saklanir.
+Playwright ile siteyi ziyaret ettikten sonra CAGIR.`,
+    inputSchema: {
+        domain: z.string().min(1).describe("Site domain'i"),
+        pageUrl: z.string().optional().describe("Sayfa URL'si"),
+        selectors: z.record(z.string()).optional().describe("CSS selector'lar"),
+        workflow: z.object({ name: z.string(), steps: z.array(z.object({ action: z.string(), selector: z.string().optional(), url: z.string().optional(), value: z.string().optional() })) }).optional(),
+        patterns: z.record(z.any()).optional().describe("Ogrenilen patternler"),
+        auth: z.object({ loginUrl: z.string().optional(), loginMethod: z.string().optional(), selectors: z.record(z.string()).optional() }).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ domain, pageUrl, selectors, workflow, patterns, auth }) => {
+    ensureJarwisDirs();
+    const safeDomain = domain.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const filePath = `browser-context/sites/${safeDomain}.json`;
+    const existing = jarwisReadJson(filePath) || { domain, lastVisited: new Date().toISOString(), visitCount: 0, auth: {}, knownPages: {}, workflows: [], learnedPatterns: {} };
+    existing.lastVisited = new Date().toISOString();
+    existing.visitCount = (existing.visitCount || 0) + 1;
+    if (pageUrl && selectors) {
+        existing.knownPages = existing.knownPages || {};
+        existing.knownPages[pageUrl] = existing.knownPages[pageUrl] || {};
+        existing.knownPages[pageUrl].selectors = { ...(existing.knownPages[pageUrl].selectors || {}), ...selectors };
+        existing.knownPages[pageUrl].lastSnapshot = new Date().toISOString();
+    }
+    if (workflow) {
+        existing.workflows = existing.workflows || [];
+        const idx = existing.workflows.findIndex((w) => w.name === workflow.name);
+        const wf = { ...workflow, lastUsed: new Date().toISOString(), useCount: 1 };
+        if (idx >= 0) {
+            wf.useCount = (existing.workflows[idx].useCount || 0) + 1;
+            existing.workflows[idx] = wf;
+        }
+        else {
+            existing.workflows.push(wf);
+        }
+    }
+    if (patterns)
+        existing.learnedPatterns = { ...(existing.learnedPatterns || {}), ...patterns };
+    if (auth)
+        existing.auth = { ...(existing.auth || {}), ...auth };
+    jarwisWriteJson(filePath, existing);
+    const mc = jarwisReadJson("jarwis-context.json");
+    if (mc) {
+        mc.frequentSites = mc.frequentSites || [];
+        const siteIdx = mc.frequentSites.findIndex((s) => s.domain === domain);
+        const siteRef = { domain, lastVisited: new Date().toISOString(), contextFile: filePath };
+        if (siteIdx >= 0)
+            mc.frequentSites[siteIdx] = siteRef;
+        else
+            mc.frequentSites.push(siteRef);
+        mc.lastUpdated = new Date().toISOString();
+        jarwisWriteJson("jarwis-context.json", mc);
+    }
+    return { content: [{ type: "text", text: `Site context guncellendi: ${domain} → ${filePath}` }] };
+});
+server.registerTool("jarwis_update_project", {
+    title: "Jarwis Proje Bilgisi Guncelle",
+    description: `Bir yazilim projesi hakkinda bilgi kaydeder. devkit_scan_project veya proje islemi sonrasinda CAGIR.`,
+    inputSchema: {
+        name: z.string().min(1).describe("Proje adi"),
+        path: z.string().optional(), framework: z.string().optional(), architecture: z.string().optional(),
+        git: z.object({ remote: z.string().optional(), defaultBranch: z.string().optional(), currentBranch: z.string().optional() }).optional(),
+        techStack: z.record(z.any()).optional(), structure: z.record(z.any()).optional(),
+        command: z.object({ command: z.string(), result: z.string() }).optional(),
+        issue: z.string().optional(), deployment: z.record(z.any()).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ name, path, framework, architecture, git, techStack, structure, command, issue, deployment }) => {
+    ensureJarwisDirs();
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+    const filePath = `programming-context/projects/${safeName}.json`;
+    const existing = jarwisReadJson(filePath) || { name, path: path || "", framework: framework || "unknown", architecture: architecture || "unknown", lastScanned: new Date().toISOString(), git: {}, techStack: {}, structure: {}, recentCommands: [], knownIssues: [], deployments: {} };
+    if (path)
+        existing.path = path;
+    if (framework)
+        existing.framework = framework;
+    if (architecture)
+        existing.architecture = architecture;
+    if (git)
+        existing.git = { ...(existing.git || {}), ...git };
+    if (techStack)
+        existing.techStack = { ...(existing.techStack || {}), ...techStack };
+    if (structure)
+        existing.structure = { ...(existing.structure || {}), ...structure };
+    if (deployment)
+        existing.deployments = { ...(existing.deployments || {}), ...deployment };
+    if (command) {
+        existing.recentCommands = existing.recentCommands || [];
+        existing.recentCommands.unshift({ ...command, timestamp: new Date().toISOString() });
+        if (existing.recentCommands.length > 20)
+            existing.recentCommands = existing.recentCommands.slice(0, 20);
+    }
+    if (issue) {
+        existing.knownIssues = existing.knownIssues || [];
+        existing.knownIssues.push({ issue, addedAt: new Date().toISOString() });
+    }
+    existing.lastScanned = new Date().toISOString();
+    jarwisWriteJson(filePath, existing);
+    const mc = jarwisReadJson("jarwis-context.json");
+    if (mc) {
+        mc.activeProjects = mc.activeProjects || [];
+        const projIdx = mc.activeProjects.findIndex((p) => p.name === name);
+        const projRef = { name, path: existing.path, framework: existing.framework, lastAccessed: new Date().toISOString(), contextFile: filePath };
+        if (projIdx >= 0)
+            mc.activeProjects[projIdx] = projRef;
+        else
+            mc.activeProjects.push(projRef);
+        mc.lastUpdated = new Date().toISOString();
+        jarwisWriteJson("jarwis-context.json", mc);
+    }
+    return { content: [{ type: "text", text: `Proje context guncellendi: ${name} → ${filePath}` }] };
+});
+server.registerTool("jarwis_scan_pc", {
+    title: "Jarwis PC Bilgilerini Tara",
+    description: `Lokal PC'deki kurulu araclari ve versiyonlari tarar. "PC bilgilerini tara", "hangi araclar kurulu" dediginde CAGIR.`,
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+}, async () => {
+    ensureJarwisDirs();
+    const tools = {};
+    const checks = { dotnet: "dotnet --version", node: "node --version", npm: "npm --version", git: "git --version", docker: "docker --version", az: "az version --output tsv", gh: "gh --version", python: "python --version", kubectl: "kubectl version --client --short" };
+    for (const [tool, cmd] of Object.entries(checks)) {
+        try {
+            const result = await devkitApi("shell/exec", "POST", { command: cmd, shell: "cmd", timeoutSeconds: 10 });
+            tools[tool] = result.success && result.stdout ? { version: result.stdout.trim().split("\n")[0], installed: "true" } : { installed: "false" };
+        }
+        catch {
+            tools[tool] = { installed: "false" };
+        }
+    }
+    jarwisWriteJson("local-pc-context/installed-tools.json", { lastScanned: new Date().toISOString(), tools });
+    const installed = Object.entries(tools).filter(([, v]) => v.installed === "true");
+    const parts = [`PC tarandi. ${installed.length} arac bulundu:`];
+    for (const [name, info] of installed)
+        parts.push(`  ${name}: ${info.version}`);
+    return { content: [{ type: "text", text: parts.join("\n") }] };
+});
+server.registerTool("jarwis_end_session", {
+    title: "Jarwis Session Sonlandir",
+    description: `Aktif session'i kapatir. "session bitir", "cikis", "session kapat" dediginde CAGIR.`,
+    inputSchema: {
+        topics: z.array(z.string()).optional().describe("Session'da islenen konular"),
+        summary: z.string().optional().describe("Session ozeti"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+}, async ({ topics, summary }) => {
+    ensureJarwisDirs();
+    const mc = jarwisReadJson("jarwis-context.json");
+    if (!mc?.stats?.lastSessionId)
+        return { content: [{ type: "text", text: "Aktif session yok." }] };
+    const sessionLog = jarwisReadJson(`session-logs/${mc.stats.lastSessionId}.json`);
+    if (!sessionLog)
+        return { content: [{ type: "text", text: `Session log bulunamadi: ${mc.stats.lastSessionId}` }] };
+    sessionLog.endedAt = new Date().toISOString();
+    if (topics)
+        sessionLog.topics = topics;
+    if (summary)
+        sessionLog.summary = summary;
+    jarwisWriteJson(`session-logs/${mc.stats.lastSessionId}.json`, sessionLog);
+    mc.lastUpdated = new Date().toISOString();
+    jarwisWriteJson("jarwis-context.json", mc);
+    return { content: [{ type: "text", text: `Session sonlandirildi: ${mc.stats.lastSessionId} (${sessionLog.actions?.length || 0} islem kayitli)` }] };
+});
+// ═══════════════════════════════════════════════
 // ENTRY POINT
 // ═══════════════════════════════════════════════
 const args = process.argv.slice(2);
@@ -3312,11 +3932,11 @@ if (args.includes("--cleanup")) {
     process.exit(0);
 }
 if (args.includes("--help") || args.includes("-h")) {
-    console.log(`DevKit MCP Server v1.2.1
+    console.log(`DevKit MCP Server + Jarwis System v1.2.1
 
 Usage:
-  devkit-mcp-server               Start MCP server (stdio mode)
-  devkit-mcp-server --setup       Auto-configure Claude Desktop
+  devkit-mcp-server               Start MCP server (stdio mode, Jarwis instructions dahil)
+  devkit-mcp-server --setup       Auto-configure Claude Desktop + Jarwis bellek sistemi
   devkit-mcp-server --setup-code  Auto-configure Claude Code
   devkit-mcp-server --setup-all   Configure both Claude Desktop and Claude Code
   devkit-mcp-server --cleanup     Clean vm_bundles and cache
@@ -3324,8 +3944,16 @@ Usage:
 
 Environment:
   DEVKIT_URL      DevKit backend URL (default: http://localhost:5199)
+  JARWIS_ROOT     Jarwis bellek dizini (default: C:\\source\\.jarwis)
   TRANSPORT       stdio or http (default: stdio)
   PORT            HTTP port when TRANSPORT=http (default: 3100)
+
+Jarwis Persistent Memory:
+  C:\\source\\.jarwis\\jarwis-context.json        Ana context dosyasi
+  C:\\source\\.jarwis\\browser-context\\sites\\     Site bazli bellek
+  C:\\source\\.jarwis\\programming-context\\        Proje bazli bellek
+  C:\\source\\.jarwis\\local-pc-context\\           PC bilgileri
+  C:\\source\\.jarwis\\session-logs\\               Session loglari
 `);
     process.exit(0);
 }
@@ -3340,13 +3968,37 @@ async function runStdio() {
 }
 async function runHTTP() {
     // Lazy import: express ve StreamableHTTPServerTransport sadece HTTP modunda yuklenir
-    // Bu sayede stdio modunda @hono/node-server crash'i onlenir
+    // Bu sayede stdio modunda crash onlenir
     const [{ default: express }, { StreamableHTTPServerTransport }] = await Promise.all([
         import("express"),
         import("@modelcontextprotocol/sdk/server/streamableHttp.js"),
     ]);
     const app = express();
     app.use(express.json());
+    // ─── API KEY AUTH MIDDLEWARE ─────────────────────────────────────────────
+    const MCP_API_KEY = process.env.MCP_API_KEY?.trim();
+    if (MCP_API_KEY) {
+        app.use((req, res, next) => {
+            // /health endpoint her zaman açık (monitoring / ngrok probe)
+            if (req.path === "/health")
+                return next();
+            const fromHeader = req.headers["x-api-key"];
+            const authHeader = req.headers["authorization"];
+            const fromBearer = authHeader?.replace(/^Bearer\s+/i, "");
+            const fromQuery = req.query?.api_key;
+            const provided = fromHeader ?? fromBearer ?? fromQuery;
+            if (!provided || provided !== MCP_API_KEY) {
+                res.status(401).json({ error: "Unauthorized: invalid or missing API key" });
+                return;
+            }
+            next();
+        });
+        console.error(`[Auth] API Key etkin – ilk 8 karakter: ${MCP_API_KEY.slice(0, 8)}...`);
+    }
+    else {
+        console.error("[Auth] UYARI: MCP_API_KEY set edilmedi. HTTP modu kimlik dogrulamasiz calisiyor!");
+    }
+    // ────────────────────────────────────────────────────────────────────────
     app.post("/mcp", async (req, res) => {
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
@@ -3357,12 +4009,19 @@ async function runHTTP() {
         await transport.handleRequest(req, res, req.body);
     });
     app.get("/health", (_req, res) => {
-        res.json({ status: "ok", server: "devkit-mcp-server" });
+        res.json({
+            status: "ok",
+            server: "devkit-mcp-server",
+            auth: MCP_API_KEY ? "enabled" : "disabled",
+        });
     });
     const port = parseInt(process.env.PORT || "3100");
     app.listen(port, () => {
         console.error(`DevKit MCP server running on http://localhost:${port}/mcp`);
         console.error(`Prompts directory: ${PROMPTS_DIR}`);
+        if (MCP_API_KEY) {
+            console.error(`[Auth] API Key zorunlu – x-api-key veya Bearer header ile gonderin`);
+        }
     });
 }
 const transportMode = process.env.TRANSPORT || "stdio";

@@ -5,6 +5,14 @@
       "env": {
         "DEVKIT_URL": "http://localhost:5199"
       }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp"]
+    },
+    "windows-mcp": {
+      "command": "uvx",
+      "args": ["windows-mcp"]
     }
   },
   "preferences": {
@@ -13,6 +21,10 @@
     "ccdScheduledTasksEnabled": true,
     "sidebarMode": "chat",
     "coworkWebSearchEnabled": true,
-    "keepAwakeEnabled": true
+    "keepAwakeEnabled": true,
+    "chicagoEnabled": true,
+    "bypassPermissionsModeEnabled": true,
+    "dockBounceEnabled": true,
+    "launchPreviewPersistSession": true
   }
 }
