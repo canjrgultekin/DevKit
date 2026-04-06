@@ -302,7 +302,7 @@ C:\source\.jarwis\
     "pageLoadWait": 3000,
     "ajaxWait": "networkidle",
     "captchaPresent": false,
-    "sessionTimeout": 1800
+    "sessionTimeout": 5000
   }
 }
 ```

@@ -1,6 +1,6 @@
 {
   "name": "devkit-mcp-server",
-  "version": "1.3.9",
+  "version": "1.3.10",
   "description": "DevKit MCP Server + Jarwis AI Companion System - 160+ tools for full-stack development via Claude Desktop. Includes persistent memory, connector orchestration (Playwright, Windows-MCP, Excel-MCP), project scaffolding, architecture design, Git, Docker, Azure deploy, DB operations (PostgreSQL/MSSQL/Couchbase), Redis, Kafka, build/test/publish, shell execution, file management, code generation, and more.",
   "author": "Can Gultekin",
   "license": "MIT",

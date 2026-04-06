@@ -1823,7 +1823,7 @@ pg_dump, redis-cli, docker, kubectl, curl, ssh VE bunlar gibi TUM CLI komutlari 
       command: z.string().min(1).describe("Calistirilacak komut"),
       workingDirectory: z.string().optional().describe("Calisma dizini (bossa aktif profil)"),
       shell: z.enum(["powershell", "ps", "pwsh", "bash", "sh", "cmd"]).optional().describe("Shell tipi"),
-      timeoutSeconds: z.number().optional().describe("Timeout saniye (varsayilan 120)"),
+      timeoutSeconds: z.number().optional().describe("Timeout saniye (varsayilan 5000)"),
       environment: z.record(z.string()).optional().describe("Ortam degiskenleri ({PGPASSWORD: '...', NODE_ENV: 'production'})"),
       stdin: z.string().optional().describe("Komuta gonderilecek stdin icerigi (orn: yes/no cevabi, username, password). Birden fazla satir icin \\n kullanin."),
     },
@@ -1835,7 +1835,7 @@ pg_dump, redis-cli, docker, kubectl, curl, ssh VE bunlar gibi TUM CLI komutlari 
       dir = profileRes?.profile?.workspace;
     }
     const data = await devkitApi("shell/exec", "POST", {
-      command, workingDirectory: dir, shell, timeoutSeconds: timeoutSeconds || 120, environment, stdin,
+      command, workingDirectory: dir, shell, timeoutSeconds: timeoutSeconds || 5000, environment, stdin,
     });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
@@ -1861,7 +1861,7 @@ Her adim icin ayri workingDirectory ve shell belirtilebilir.
       shell: z.enum(["powershell", "ps", "pwsh", "bash", "sh", "cmd"]).optional().describe("Varsayilan shell"),
       workingDirectory: z.string().optional().describe("Varsayilan dizin (bossa aktif profil)"),
       stopOnError: z.boolean().optional().describe("Hatada dur (varsayilan true)"),
-      timeoutSeconds: z.number().optional().describe("Varsayilan timeout (120sn)"),
+      timeoutSeconds: z.number().optional().describe("Varsayilan timeout (5000sn)"),
       environment: z.record(z.string()).optional(),
     },
   },
@@ -1873,7 +1873,7 @@ Her adim icin ayri workingDirectory ve shell belirtilebilir.
     }
     const data = await devkitApi("shell/exec-steps", "POST", {
       steps, shell, workingDirectory: dir, stopOnError: stopOnError ?? true,
-      timeoutSeconds: timeoutSeconds || 120, environment,
+      timeoutSeconds: timeoutSeconds || 5000, environment,
     });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
@@ -1906,7 +1906,7 @@ Script varsayilan olarak silinir, keepScript=true ile saklanir, saveTo ile belir
     }
     const data = await devkitApi("shell/run-script", "POST", {
       script, workingDirectory: dir, shell, scriptFileName, saveTo,
-      keepScript: keepScript || false, timeoutSeconds: timeoutSeconds || 120, environment,
+      keepScript: keepScript || false, timeoutSeconds: timeoutSeconds || 5000, environment,
     });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
@@ -1929,7 +1929,7 @@ Dosya uzantisina gore otomatik dogru shell secer. Arguman gonderilebilir.
   },
   async ({ filePath, workingDirectory, arguments: args, timeoutSeconds, environment }) => {
     const data = await devkitApi("shell/run-file", "POST", {
-      filePath, workingDirectory, arguments: args, timeoutSeconds: timeoutSeconds || 120, environment,
+      filePath, workingDirectory, arguments: args, timeoutSeconds: timeoutSeconds || 5000, environment,
     });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
@@ -2502,7 +2502,7 @@ server.registerTool(
       case "list": command = "gh repo list --limit 20"; break;
       default: return { content: [{ type: "text", text: "Gecersiz action." }] };
     }
-    const data = await devkitApi("run", "POST", { command, workingDirectory: dir, timeoutSeconds: 30 });
+    const data = await devkitApi("run", "POST", { command, workingDirectory: dir, timeoutSeconds: 5000 });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -2538,7 +2538,7 @@ server.registerTool(
       case "merge": command = `gh pr merge ${prNumber || ""} --merge`; break;
       default: return { content: [{ type: "text", text: "Gecersiz action." }] };
     }
-    const data = await devkitApi("run", "POST", { command, workingDirectory: dir, timeoutSeconds: 30 });
+    const data = await devkitApi("run", "POST", { command, workingDirectory: dir, timeoutSeconds: 5000 });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -2557,13 +2557,13 @@ server.registerTool(
     inputSchema: {
       url: z.string().min(1).describe("URL (orn: http://localhost:5001/health)"),
       method: z.enum(["GET", "POST", "HEAD"]).optional().default("GET"),
-      timeoutSeconds: z.number().optional().default(10),
+      timeoutSeconds: z.number().optional().default(5000),
     },
   },
   async ({ url, method, timeoutSeconds }) => {
-    const curlCmd = `curl -s -o /dev/null -w "%{http_code} %{time_total}s" -X ${method || "GET"} "${url}" --max-time ${timeoutSeconds || 10}`;
+    const curlCmd = `curl -s -o /dev/null -w "%{http_code} %{time_total}s" -X ${method || "GET"} "${url}" --max-time ${timeoutSeconds || 5000}`;
     const data = await devkitApi<{ success: boolean; stdout?: string; stderr?: string; error?: string }>(
-      "shell/exec", "POST", { command: curlCmd, shell: "cmd", timeoutSeconds: (timeoutSeconds || 10) + 5 }
+      "shell/exec", "POST", { command: curlCmd, shell: "cmd", timeoutSeconds: (timeoutSeconds || 5000) + 5 }
     );
  
     if (data.success && data.stdout) {
@@ -2598,7 +2598,7 @@ server.registerTool(
     const command = source === "nuget"
       ? `dotnet package search "${query}" --take ${take || 10}`
       : `npm search "${query}" --long --limit=${take || 10}`;
-    const data = await devkitApi("shell/exec", "POST", { command, shell: "cmd", timeoutSeconds: 30 });
+    const data = await devkitApi("shell/exec", "POST", { command, shell: "cmd", timeoutSeconds: 5000 });
     return { content: [{ type: "text", text: formatResult(data) }] };
   }
 );
@@ -3390,7 +3390,7 @@ Method, headers, query params ve body desteklenir. "API'ye request at", "endpoin
       queryParams: z.record(z.string()).optional().describe("Query parameters"),
       body: z.string().optional().describe("Request body (JSON string)"),
       contentType: z.string().default("application/json"),
-      timeoutSeconds: z.number().default(30),
+      timeoutSeconds: z.number().default(5000),
     },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
   },
@@ -4785,7 +4785,7 @@ server.registerTool(
     const checks: Record<string, string> = { dotnet: "dotnet --version", node: "node --version", npm: "npm --version", git: "git --version", docker: "docker --version", az: "az version --output tsv", gh: "gh --version", python: "python --version", kubectl: "kubectl version --client --short" };
     for (const [tool, cmd] of Object.entries(checks)) {
       try {
-        const result = await devkitApi<{ success: boolean; stdout?: string }>("shell/exec", "POST", { command: cmd, shell: "cmd", timeoutSeconds: 10 });
+        const result = await devkitApi<{ success: boolean; stdout?: string }>("shell/exec", "POST", { command: cmd, shell: "cmd", timeoutSeconds: 5000 });
         tools[tool] = result.success && result.stdout ? { version: result.stdout.trim().split("\n")[0], installed: "true" } : { installed: "false" };
       } catch { tools[tool] = { installed: "false" }; }
     }
