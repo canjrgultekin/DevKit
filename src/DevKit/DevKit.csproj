@@ -5,6 +5,7 @@
 		<TargetFramework>net9.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 
 		<!-- Tool Packaging -->
 		<PackAsTool>true</PackAsTool>
@@ -45,6 +46,7 @@
 
 	<!-- prompts: AI prompt sablonlari -->
 	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
 		<None Include="..\..\prompts\**" CopyToOutputDirectory="PreserveNewest" LinkBase="prompts" Pack="true" PackagePath="tools\net9.0\any\prompts" />
 	</ItemGroup>
 

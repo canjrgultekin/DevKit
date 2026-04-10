@@ -1,367 +1,114 @@
-# DevKit
+# DevKit-Tool
 
-Developer toolkit that bridges AI code generation with real project workflows. Build, scaffold, import, and deploy — all from a single local web interface.
+[![NuGet](https://img.shields.io/nuget/v/DevKit-Tool.svg)](https://www.nuget.org/packages/DevKit-Tool)
+[![Downloads](https://img.shields.io/nuget/dt/DevKit-Tool.svg)](https://www.nuget.org/packages/DevKit-Tool)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-DevKit solves the biggest pain point of AI-assisted development: you get code from Claude (or any AI), then spend 20 minutes creating folders, copying files one by one, and manually deploying. DevKit automates all of that.
+**Developer Toolkit & AI Companion** — .NET, Next.js, Node.js ve Python projeleri için local-first geliştirme otomasyonu, native Claude Desktop MCP entegrasyonlu.
 
-## What it does
+DevKit, geliştiricinin gün içinde kullandığı operasyonel adımları (proje iskeleti, mimari tasarım, Git, Docker, Azure deploy, veritabanı, mesajlaşma, observability, kod üretimi, dosya yönetimi) tek bir local API + UI altında toplar ve aynı yetenekleri Claude Desktop'a MCP üzerinden açar. Bir kez kurarsın, hem tarayıcı tabanlı UI'dan hem de Claude Desktop'tan doğal dilde kullanırsın.
 
-**Project Scaffolding** — Paste a JSON manifest and DevKit creates the entire project structure on disk: solution files, project files, folders, classes with correct namespaces, package references, everything. Supports .NET, Next.js, and Node.js.
-
-**AI File Import** — Drag and drop files from Claude into DevKit. Each file has a `DEVKIT_PATH` marker in the first line that tells DevKit exactly where it belongs in the project. DevKit reads the marker, places the file in the correct location, and removes the marker line. No more copy-paste.
-
-**Azure Management** — Login, deploy, set environment variables, restart services, view logs, and run custom `az` commands. All from the UI, no terminal switching.
-
-**Profile System** — Manage multiple projects with different frameworks, workspaces, and Azure configurations. Switch between them with one click.
-
-## How it works
-
-```
-You describe a project to Claude
-        │
-        ▼
-Claude sends a JSON manifest (project structure)
-        │
-        ▼
-You paste the JSON into DevKit → Scaffold
-        │
-        ▼
-DevKit creates the entire project on disk
-        │
-        ▼
-Claude starts coding, each file has a DEVKIT_PATH marker
-        │
-        ▼
-You download files, drag-drop into DevKit → File Import
-        │
-        ▼
-DevKit places each file at the correct path automatically
-        │
-        ▼
-Click Deploy → DevKit builds, zips, and deploys to Azure
-```
-
-## Quick start
-
-### Prerequisites
-
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- [Node.js 20+](https://nodejs.org/) (for building the frontend)
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (optional, for Azure features)
-
-### Installation
+## Tek Komutla Kurulum
 
 ```bash
-git clone https://github.com/canjrgultekin/devkit.git
-cd devkit/src/DevKit/ClientApp
-npm install
-npm run build
-cd ..
-dotnet run
+dotnet tool install -g DevKit-Tool
+devkit
 ```
 
-DevKit opens at `http://localhost:5199`. The React frontend is built into `wwwroot` and served by the .NET backend — no separate frontend server needed in production.
+Sadece bu kadar. `devkit` ilk çalıştığında `devkit-mcp-server` paketini otomatik olarak npm üzerinden global kurar, Claude Desktop config'ini günceller ve mevcut MCP connector'larını ezmeden yapılandırmayı tamamlar. Sonraki çalıştırmalarda MCP server güncel sürüme çekilir, Claude Desktop config sessizce senkronlanır.
 
-### Development mode
-
-For hot reload during frontend development, run two terminals:
+Güncellemek için:
 
 ```bash
-# Terminal 1: Backend
-cd src/DevKit
-dotnet run
-
-# Terminal 2: Frontend (hot reload)
-cd src/DevKit/ClientApp
-npm run dev
+dotnet tool update -g DevKit-Tool
 ```
 
-Frontend dev server runs at `http://localhost:5173` with proxy to the backend.
-
-## Setting up a profile
-
-Go to **Profiles** → **New Profile** and fill in:
-
-| Field | Example | Description |
-|-------|---------|-------------|
-| Profile Key | `myapp-backend` | Unique short identifier |
-| Name | `MyApp Backend` | Display name |
-| Workspace Path | `E:\source\myapp\backend` | Root directory of your project on disk |
-| Framework | `.NET` | dotnet, nextjs, or nodejs |
-
-For Azure deployment, expand **Azure Configuration**:
-
-| Field | Example |
-|-------|---------|
-| Subscription ID | `72b7f481-5891-...` |
-| Resource Group | `rg-myapp` |
-
-Then **Add Resource** for each Azure resource:
-
-| Field | Example | Description |
-|-------|---------|-------------|
-| Name | `app-myapp-api` | Azure resource name (as in Azure Portal) |
-| Type | `App Service` | appservice, functionapp, containerapp, staticwebapp |
-| Project Path | `src/MyApp.Api` | Relative to workspace, which project to publish |
-| Deploy Mode | `App Service (auto build)` | See deploy modes below |
-
-### Deploy modes
-
-- **App Service (auto build)** — DevKit runs `dotnet publish` or `npm run build`, zips the output, and deploys via `az webapp deploy`.
-- **Custom Script** — DevKit runs your `.ps1` or `.sh` script, zips the output directory you specify, and deploys. Use this when you have a custom build pipeline (e.g., Next.js standalone with static assets and web.config).
-- **WebJob (continuous/triggered)** — DevKit publishes, wraps the output in `App_Data/jobs/{type}/{name}/` structure, and deploys to a host App Service.
-
-## Scaffolding a project
-
-### The manifest format
-
-DevKit uses a JSON manifest to describe project structure. Paste it into the **Scaffold** page, set the output path, and click **Scaffold Project**.
-
-```json
-{
-  "solution": "MyApp",
-  "framework": "dotnet",
-  "outputPath": "",
-  "projects": [
-    {
-      "name": "MyApp.Domain",
-      "path": "src/MyApp.Domain",
-      "type": "classlib",
-      "targetFramework": "net9.0",
-      "folders": ["Entities", "Interfaces"],
-      "files": [
-        { "path": "Entities/User.cs" },
-        { "path": "Interfaces/IUserRepository.cs" }
-      ],
-      "dependencies": [],
-      "projectReferences": [],
-      "scripts": {},
-      "npmDependencies": {},
-      "npmDevDependencies": {}
-    }
-  ],
-  "globalFiles": []
-}
-```
-
-**Framework options:** `dotnet`, `nextjs`, `nodejs`
-
-**Project types (.NET):** `classlib`, `webapi`, `console`, `worker`, `test`
-
-**What gets created:**
-- `.sln` file with all project references
-- `.csproj` / `package.json` / `tsconfig.json` per project
-- NuGet/npm dependencies pre-configured
-- All folders and empty class/interface files with correct namespaces
-- `.gitignore` and other global files
-
-## Importing AI-generated files
-
-### The DEVKIT_PATH convention
-
-Every file that Claude (or any AI) generates should have a path marker as the **first line**:
-
-```csharp
-// DEVKIT_PATH: src/MyApp.Domain/Entities/User.cs
-
-namespace MyApp.Domain.Entities;
-
-public class User
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-}
-```
-
-Supported marker formats:
-
-| File type | Format |
-|-----------|--------|
-| C#, JS, TS, Java | `// DEVKIT_PATH: path/to/file.cs` |
-| Python, YAML | `# DEVKIT_PATH: path/to/file.py` |
-| HTML, XML, Razor | `<!-- DEVKIT_PATH: path/to/file.html -->` |
-| CSS, SCSS | `/* DEVKIT_PATH: path/to/file.css */` |
-| JSON | `"_devkit_path": "path/to/file.json"` (first key) |
-
-### Import workflow
-
-1. Download files from Claude
-2. Go to **File Import** page
-3. Set the **Project Root** (or it uses the active profile's workspace)
-4. Drag and drop files (single or batch)
-5. Click **Preview** to verify detected paths
-6. Click **Import** — DevKit places each file at the correct location and removes the marker line
-
-If a file already exists at the target path, the imported file overwrites it (last write wins).
-
-## Claude prompt
-
-To make Claude follow the manifest, DEVKIT_PATH, and downloadable file conventions, paste this prompt at the start of your conversation:
-
-```
-I use a development tool called DevKit. The following three rules apply throughout
-this entire conversation, no exceptions.
-
-===== RULE 1: PROJECT STRUCTURE (MANIFEST JSON) =====
-
-When communicating the project structure, use this exact JSON format:
-
-{
-  "solution": "SolutionName",
-  "framework": "dotnet",
-  "outputPath": "",
-  "projects": [
-    {
-      "name": "SolutionName.Domain",
-      "path": "src/SolutionName.Domain",
-      "type": "classlib",
-      "targetFramework": "net9.0",
-      "folders": ["Entities", "Interfaces"],
-      "files": [
-        { "path": "Entities/Customer.cs" }
-      ],
-      "dependencies": [],
-      "projectReferences": [],
-      "scripts": {},
-      "npmDependencies": {},
-      "npmDevDependencies": {}
-    }
-  ],
-  "globalFiles": []
-}
-
-Deliver as a single JSON code block with no surrounding explanation.
-
-===== RULE 2: FILE DELIVERY (DEVKIT_PATH) =====
-
-Add a path marker as the FIRST LINE of every file you code:
-
-C#/JS/TS:  // DEVKIT_PATH: src/Project/Folder/File.cs
-Python:    # DEVKIT_PATH: src/services/file.py
-HTML:      <!-- DEVKIT_PATH: src/views/index.html -->
-CSS:       /* DEVKIT_PATH: src/styles/main.css */
-JSON:      "_devkit_path": "src/config/app.json" (first key)
-
-Path must be relative to project root. Use forward slashes.
-Leave one blank line after the marker before actual code.
-Never deliver a file without the marker.
-
-===== RULE 3: DELIVER FILES AS DOWNLOADABLE =====
-
-Do NOT write code as plain text in the chat. Every file you develop MUST be
-delivered as a DOWNLOADABLE FILE. I will download these files and drag-drop
-them into DevKit.
-
-File delivery rules:
-- Create each file as a separate downloadable file with a download link
-- The filename must match the last segment of the DEVKIT_PATH marker
-- Do NOT paste code in a code block and say "copy this" — deliver it as a file
-- If there are multiple files, deliver each one as a separate downloadable file
-- This rule does NOT apply to the manifest JSON — deliver the manifest as a code block
-
-===== WORKFLOW =====
-
-1. I describe the project
-2. You deliver the structure as RULE 1 manifest JSON
-3. I scaffold it in DevKit
-4. You start coding with RULE 2 markers on every file
-5. You deliver every file as a downloadable file per RULE 3
-6. I download files and drag-drop them into DevKit
-```
-
-## Azure deployment
-
-### First time setup
-
-1. Configure Azure settings in your profile (subscription, resource group, resources)
-2. Go to **Azure** page → click **Azure Login** (opens a login window)
-3. Complete login → click **Verify Login**
-4. Select a resource from the dropdown → click **Deploy**
-
-DevKit handles the entire pipeline: build → publish → zip → deploy → cleanup.
-
-### SCM access (if you get 403 on deploy)
-
-If your App Service has SCM IP restrictions, whitelist your IP:
+Kaldırmak için:
 
 ```bash
-az webapp config access-restriction add \
-  --resource-group rg-myapp \
-  --name app-myapp-api \
-  --rule-name DevKitDeploy \
-  --action Allow \
-  --ip-address YOUR_IP/32 \
-  --priority 50 \
-  --scm-site true
+dotnet tool uninstall -g DevKit-Tool
 ```
 
-### Custom deploy scripts
+## Çalıştırma Modları
 
-For projects that need custom build steps (e.g., Next.js with standalone output, static asset copying, web.config injection), set the resource's Deploy Mode to **Custom Script** and provide:
-
-- **Deploy Script**: path to your `.ps1` or `.sh` file (relative to project path)
-- **Output Path**: the directory to zip after the script runs (e.g., `.next/standalone`)
-- **Clean deploy**: check this to pass `--clean true` to `az webapp deploy`
-
-## Project structure
-
-```
-DevKit/
-├── DevKit.sln
-└── src/DevKit/
-    ├── DevKit.csproj
-    ├── Program.cs
-    ├── Configuration/
-    │   ├── DevKitProfile.cs          # Profile, Azure config models
-    │   └── ProfileManager.cs         # ~/.devkit/devkit.json management
-    ├── Models/
-    │   ├── ProjectManifest.cs        # Scaffold manifest models
-    │   └── FileImportResult.cs       # Import result models
-    ├── Services/
-    │   ├── Scaffolding/
-    │   │   ├── ScaffoldingService.cs  # Framework routing
-    │   │   ├── DotNetScaffolder.cs   # .sln, .csproj, .cs generation
-    │   │   ├── NextJsScaffolder.cs   # package.json, app router
-    │   │   └── NodeJsScaffolder.cs   # package.json, src structure
-    │   ├── FileImport/
-    │   │   └── FileImportService.cs  # DEVKIT_PATH parser, 5 format support
-    │   └── Azure/
-    │       └── AzureService.cs       # az CLI wrapper, all deploy modes
-    ├── Controllers/
-    │   ├── ProfileController.cs
-    │   ├── ScaffoldingController.cs
-    │   ├── FileImportController.cs
-    │   └── AzureController.cs
-    └── ClientApp/                    # React + Vite + Tailwind
-        └── src/
-            ├── App.tsx
-            ├── api.ts
-            ├── types.ts
-            └── pages/
-                ├── DashboardPage.tsx
-                ├── ScaffoldPage.tsx
-                ├── FileImportPage.tsx
-                ├── AzurePage.tsx
-                └── ProfilePage.tsx
+```bash
+devkit              # API + UI başlat, tarayıcıyı aç
+devkit --no-browser # Tarayıcı açmadan başlat
+devkit --install    # MCP server kurulumunu tekrar tetikle
 ```
 
-## Configuration
+| Bileşen | Adres | Açıklama |
+|---|---|---|
+| DevKit API + UI | http://localhost:5199 | REST API ve statik web arayüzü |
+| DevKit MCP Server | stdio | Claude Desktop MCP bağlantısı |
 
-DevKit stores its configuration at `~/.devkit/devkit.json`. This file is managed through the Profiles UI — you don't need to edit it manually.
+## 2.0.4 Sürümünde Yenilikler
 
-The config supports multiple profiles, each with its own workspace, framework, and Azure settings. Switch between profiles from the UI and the entire context (file import paths, deploy targets, resource list) switches with it.
+Bu sürüm, kurulum ve günlük kullanım deneyimini sıfırlıyor. Eski sürümlerde kullanıcı `npm install -g devkit-mcp-server` ve ardından `devkit-mcp-server --setup` komutlarını manuel çalıştırıyordu. 2.0.4 ile birlikte bu adımların tamamı `devkit` ilk açılışında otomatik tetikleniyor. `~/.devkit-mcp-installed` marker dosyası ile kurulum durumu izleniyor, gereksiz tekrar kurulumların önüne geçiliyor, fakat her açılışta MCP server güncel sürüme çekilip Claude Desktop config sessizce senkronlanıyor.
 
-## Tech stack
+UI tarafında Architecture Designer modülü tam genişletildi: sürükle bırak component yerleştirme, .NET, Next.js, Node.js ve Python projeleri için manifest üretimi, Docker Compose çıktısı oluşturma, Jaeger ile OpenTelemetry Collector arasındaki port çakışmalarının otomatik çözülmesi, karma mimari (dotnet + nextjs gibi) projelerinin tek tasarımdan birden fazla framework için scaffold edilmesi geldi.
 
-- **Backend:** .NET 9, ASP.NET Core, Kestrel
-- **Frontend:** React 19, Vite, Tailwind CSS, React Router, Lucide Icons
-- **CLI integration:** Azure CLI (`az`), `dotnet`, `npm`, PowerShell/Bash
-- **No database** — config is a JSON file, no external dependencies
+MCP server tarafında 160'tan fazla tool aktif: kod üretimi, Git, Docker, Azure, PostgreSQL, MSSQL, Couchbase, Redis, Kafka, RabbitMQ, build/test/publish, çok adımlı shell pipeline'ları, Jarwis kalıcı bellek sistemi, Playwright, Windows-MCP ve Excel-MCP connector orkestrasyonu gibi alanları kapsıyor.
 
-## License
+## Modüller
 
-MIT
+- **Architecture Designer** — Görsel mimari tasarım, manifest üretimi, smart-default port yönetimi, Docker Compose çıktısı.
+- **Project Scaffolding** — .NET, Next.js, Node.js, Python iskeletlerini JSON manifest'ten üretme, hibrit projelerde framework başına ayrı scaffold.
+- **Project Scanner** — Mevcut projenin teknoloji, dependency, namespace ve dosya yapısını çıkarma, Claude'a context aktarma.
+- **AI File Import** — `DEVKIT_PATH` marker'ı ile Claude'un ürettiği dosyaları doğru klasörlere yerleştirme.
+- **Code Generator** — Entity, repository, service, controller, DTO ve full CRUD setlerini doğrudan projeye yazma.
+- **Git Management** — Branch, commit, push, pull, merge, stash, tag, GitHub repo oluşturma, init + connect akışı.
+- **Docker Compose** — Kafka, RabbitMQ, PostgreSQL, MSSQL, Redis, Elasticsearch, Kibana, Logstash, Jaeger, Zipkin, Grafana, OTel Collector template'leri, appsettings.json otomatik enjeksiyon.
+- **Database Toolkit** — PostgreSQL, MSSQL, Couchbase için query, execute, batch ve describe işlemleri, EF Core migration komutları.
+- **DB Schema Visualizer** — Şema, tablo, index ve foreign key tarama, CREATE script üretme.
+- **Migration Manager** — SQL migration versiyonlama, uygulama, rollback ve durum izleme.
+- **Redis Toolkit** — Key/value, hash, list, set, TTL ve admin işlemleri.
+- **Kafka Toolkit** — Topic CRUD, produce/consume, batch publish, consumer group yönetimi.
+- **API Test Runner** — Swagger/OpenAPI parse, HTTP request gönderme, response inceleme.
+- **Package Auditor** — NuGet, npm ve pip dependency tarama, outdated ve güvenlik kontrolü.
+- **Env Comparator** — appsettings ortamlarını karşılaştırma.
+- **Log Viewer** — Yapılandırılmış log dosyası okuma, level / correlation ID / metin filtreleme.
+- **Crypto & Credentials** — AES-256-GCM şifreleme/çözme, key rotation, tablo bazlı toplu rekey.
+- **Azure Management** — App Service deploy, environment variables, restart, log görüntüleme, login akışı.
+- **Process Manager** — Arka plan process başlatma, stdin gönderme, çıktı izleme.
+- **Shell Pipeline** — Çok adımlı build, publish ve deploy script'leri.
+- **Jarwis AI Companion** — Kalıcı bellek, browser context cache, proje ve PC bilgileri, session logging.
 
-## Author
+## MCP Komut Örnekleri
 
-[Can Gultekin](https://github.com/canjrgultekin)
+Claude Desktop üzerinden doğal dilde:
+
+```
+"DevKit kurallarını yükle ve .NET projesi için hazırlan"
+"Projeyi tara"
+"Clean architecture tasarımı oluştur, adı ECommerce, PostgreSQL ve Kafka ekle"
+"Manifest oluştur ve scaffold et"
+"Docker compose oluştur, başlat ve appsettings'e connection string'leri yaz"
+"Customer entity'si için full CRUD setini üret ve projeye yaz"
+"EF migration ekle: AddCustomerEmail"
+"Tüm değişiklikleri commitle ve push yap"
+"Azure App Service'e deploy et"
+```
+
+## Gereksinimler
+
+- .NET 9 SDK
+- Node.js 18+ (MCP server için, ilk çalıştırmada otomatik kullanılır)
+- Claude Desktop (MCP entegrasyonu için)
+
+## Opsiyonel Gereksinimler
+
+- Docker Desktop (Docker Compose modülü için)
+- Azure CLI (Azure deploy modülü için)
+- GitHub CLI (GitHub repo oluşturma için)
+- PostgreSQL, MSSQL veya Couchbase (DB modülleri için)
+
+## Linkler
+
+- GitHub: https://github.com/canjrgultekin/DevKit
+- MCP Server (npm): https://www.npmjs.com/package/devkit-mcp-server
+- Issues: https://github.com/canjrgultekin/DevKit/issues
+
+## Lisans
+
+MIT © Can Gultekin
