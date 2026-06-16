@@ -8,23 +8,48 @@
     },
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp"]
+      "args": [
+        "@playwright/mcp"
+      ]
     },
     "windows-mcp": {
-      "command": "uvx",
-      "args": ["windows-mcp"]
+      "command": "C:\\Users\\adminuser\\.local\\bin\\windows-mcp.exe",
+      "args": ["serve"]
     }
   },
   "preferences": {
+    "launchPreviewPersistSession": true,
     "allowAllBrowserActions": true,
+    "dispatchCodeTasksPermissionMode": "bypassPermissions",
     "coworkScheduledTasksEnabled": true,
     "ccdScheduledTasksEnabled": true,
-    "sidebarMode": "chat",
+    "sidebarMode": "task",
+    "bypassPermissionsModeEnabled": true,
+    "bypassPermissionsOptInByAccount": {
+      "b17336af-4f5e-4aa0-8cf6-5e460ea501af": true
+    },
+    "bypassPermissionsGateByAccount": {
+      "b17336af-4f5e-4aa0-8cf6-5e460ea501af": true
+    },
+    "dockBounceEnabled": true,
     "coworkWebSearchEnabled": true,
     "keepAwakeEnabled": true,
+    "coworkOnboardingResumeStep": null,
     "chicagoEnabled": true,
-    "bypassPermissionsModeEnabled": true,
-    "dockBounceEnabled": true,
-    "launchPreviewPersistSession": true
+    "remoteToolsDeviceName": "vm-server",
+    "ccAutoArchiveOnPrClose": false,
+    "ccRemoteControlDefaultEnabled": true,
+    "epitaxyPrefs": {
+      "starred-local-code-sessions": [],
+      "starred-cowork-spaces": [
+        "04ff6ea0-1f1f-48a1-be7c-f00751609610"
+      ],
+      "starred-session-groups": [],
+      "dframe-local-slice": {
+        "pinnedOrder": [],
+        "customGroupAssignments": {},
+        "customGroupOrder": {}
+      }
+    }
   }
 }
