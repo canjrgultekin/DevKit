@@ -46,6 +46,9 @@ builder.Services.AddSingleton<ILogViewerService, LogViewerService>();
 builder.Services.AddSingleton<IMigrationService, MigrationService>();
 builder.Services.AddSingleton<IProjectManagementService, ProjectManagementService>();
 builder.Services.AddSingleton<IArchitectureDesignerService, ArchitectureDesignerService>();
+builder.Services.AddSingleton<DevKit.Services.Remote.IRemoteSshService, DevKit.Services.Remote.RemoteSshService>();
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<DevKit.Services.Llm.ILlmService, DevKit.Services.Llm.LlmService>();
 
 builder.Services.AddCors(options =>
 {
@@ -110,7 +113,7 @@ var isToolInstall = Assembly.GetExecutingAssembly().Location.Contains(".dotnet")
 
 Console.WriteLine();
 Console.WriteLine("  ╔══════════════════════════════════════╗");
-Console.WriteLine("  ║           DevKit v2.0.3              ║");
+Console.WriteLine("  ║           DevKit v2.1.0              ║");
 Console.WriteLine("  ║   Developer Toolkit & AI Companion   ║");
 Console.WriteLine("  ╚══════════════════════════════════════╝");
 Console.WriteLine();

@@ -4824,6 +4824,244 @@ server.registerTool(
 );
 
 // ═══════════════════════════════════════════════
+// REMOTE SSH TOOLS
+// Uzak sunucuda (SSH) komut calistirma + named host registry
+// ═══════════════════════════════════════════════
+
+server.registerTool(
+  "devkit_remote_host_add",
+  {
+    title: "Remote SSH Host Ekle/Guncelle",
+    description: `Uzak sunucu baglanti bilgilerini adlandirilmis profil olarak kaydeder (~/.devkit/devkit.json -> remotes).
+Bir kez tanimla, sonra devkit_remote_exec'te hostName ile cagir, her seferinde bilgi girme.
+"remote host ekle", "uzak sunucu tanimla", "ssh host kaydet", "deploy sunucusu ekle" dediginde CAGIR.`,
+    inputSchema: {
+      name: z.string().min(1).describe("Host icin kisa ad (orn: prod-docker)"),
+      host: z.string().min(1).describe("IP veya hostname"),
+      port: z.number().optional().describe("SSH port (varsayilan 22)"),
+      username: z.string().min(1).describe("SSH kullanici adi"),
+      authMethod: z.enum(["password", "privatekey"]).optional().describe("Kimlik dogrulama yontemi (varsayilan password)"),
+      password: z.string().optional().describe("Parola (authMethod=password ise)"),
+      privateKeyPath: z.string().optional().describe("Private key dosya yolu (authMethod=privatekey ise)"),
+      passphrase: z.string().optional().describe("Private key passphrase (varsa)"),
+      defaultShell: z.enum(["bash", "sh", "powershell", "pwsh", "cmd"]).optional().describe("Komutlarin sarmalanacagi shell (bossa remote default)"),
+      defaultWorkingDirectory: z.string().optional().describe("Varsayilan uzak calisma dizini"),
+      connectTimeoutSeconds: z.number().optional().describe("Baglanti timeout saniye (varsayilan 15)"),
+      description: z.string().optional().describe("Aciklama"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  async (args) => {
+    const data = await devkitApi("remote/host/save", "POST", args);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_remote_host_list",
+  {
+    title: "Remote SSH Host'lari Listele",
+    description: `Kayitli uzak sunucu profillerini listeler (parolalar gosterilmez, sadece var/yok bilgisi).
+"remote hostlari listele", "tanimli uzak sunucular", "kayitli ssh hostlari" dediginde CAGIR.`,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async () => {
+    const data = await devkitApi("remote/host/list", "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_remote_host_remove",
+  {
+    title: "Remote SSH Host Sil",
+    description: `Kayitli bir uzak sunucu profilini siler.
+"remote host sil", "uzak sunucu kaydini kaldir" dediginde CAGIR.`,
+    inputSchema: {
+      name: z.string().min(1).describe("Silinecek host adi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ name }) => {
+    const data = await devkitApi("remote/host/remove", "POST", { name });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_remote_host_test",
+  {
+    title: "Remote SSH Baglanti Testi",
+    description: `Uzak sunucuya baglanmayi test eder (kayitli hostName veya inline bilgilerle) ve sunucu bilgisini doner.
+"remote baglantiyi test et", "ssh baglantisini dene", "sunucuya erisebiliyor muyuz" dediginde CAGIR.`,
+    inputSchema: {
+      hostName: z.string().optional().describe("Kayitli host adi"),
+      host: z.string().optional().describe("Inline: IP/hostname"),
+      port: z.number().optional().describe("Inline: SSH port (varsayilan 22)"),
+      username: z.string().optional().describe("Inline: SSH kullanici adi"),
+      authMethod: z.enum(["password", "privatekey"]).optional().describe("Inline: kimlik dogrulama yontemi"),
+      password: z.string().optional().describe("Inline: parola"),
+      privateKeyPath: z.string().optional().describe("Inline: private key yolu"),
+      passphrase: z.string().optional().describe("Inline: key passphrase"),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  async (args) => {
+    const data = await devkitApi("remote/host/test", "POST", args);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_remote_exec",
+  {
+    title: "Uzak Sunucuda Komut Calistir (SSH)",
+    description: `Uzak bir sunucuda SSH uzerinden shell komutu calistirir.
+Kayitli host icin hostName ver; ya da inline host+username+auth (password VEYA privateKeyPath) ver.
+Deploy, git pull, docker / docker compose up-down, systemctl, kubectl gibi uzak islemler icin idealdir.
+shell ile komutu bash/powershell/cmd icinde sarmalayabilir, workingDirectory ile uzak dizinde calistirabilirsin.
+"uzak sunucuda calistir", "remote exec", "sunucuda docker compose up", "prod'da git pull", "deploy sunucusunda komut" dediginde CAGIR.`,
+    inputSchema: {
+      command: z.string().min(1).describe("Uzak sunucuda calistirilacak komut"),
+      hostName: z.string().optional().describe("Kayitli remote host adi (devkit_remote_host_add ile tanimlanan)"),
+      shell: z.enum(["bash", "sh", "powershell", "pwsh", "cmd"]).optional().describe("Komutun sarmalanacagi shell (bossa remote default / host varsayilani)"),
+      workingDirectory: z.string().optional().describe("Uzak calisma dizini"),
+      timeoutSeconds: z.number().optional().describe("Komut timeout saniye (varsayilan 120)"),
+      host: z.string().optional().describe("Inline: IP/hostname (hostName yoksa)"),
+      port: z.number().optional().describe("Inline: SSH port (varsayilan 22)"),
+      username: z.string().optional().describe("Inline: SSH kullanici adi"),
+      authMethod: z.enum(["password", "privatekey"]).optional().describe("Inline: kimlik dogrulama yontemi"),
+      password: z.string().optional().describe("Inline: parola"),
+      privateKeyPath: z.string().optional().describe("Inline: private key yolu"),
+      passphrase: z.string().optional().describe("Inline: key passphrase"),
+      connectTimeoutSeconds: z.number().optional().describe("Inline: baglanti timeout saniye"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  async (args) => {
+    const data = await devkitApi("remote/exec", "POST", args);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+// ═══════════════════════════════════════════════
+// LLM BRIDGE TOOLS
+// Kullanicinin kendi LLM hesaplari uzerinden baska modellere prompt/baglam ilet
+// ═══════════════════════════════════════════════
+
+server.registerTool(
+  "devkit_llm_provider_add",
+  {
+    title: "LLM Provider Ekle/Guncelle",
+    description: `Kullanicinin kendi LLM hesabini adlandirilmis profil olarak kaydeder (~/.devkit/devkit.json -> llmProviders).
+Bir kez tanimla, sonra devkit_llm_ask'te providerName ile cagir.
+Su an OpenAI ve OpenAI-uyumlu (Groq, OpenRouter, Azure OpenAI, Ollama) destekleniyor.
+NOT: completion icin completion-yetkili API key gerekir; OpenAI admin key (sk-admin-...) calismaz.
+"llm provider ekle", "openai hesabi tanimla", "gpt key kaydet" dediginde CAGIR.`,
+    inputSchema: {
+      name: z.string().min(1).describe("Provider icin kisa ad (orn: my-openai)"),
+      apiKey: z.string().min(1).describe("API key (completion-yetkili)"),
+      providerType: z.enum(["openai", "openai-compatible"]).optional().describe("Saglayici tipi (varsayilan openai)"),
+      baseUrl: z.string().optional().describe("OpenAI-uyumlu servisler icin base URL (bossa https://api.openai.com/v1)"),
+      defaultModel: z.string().optional().describe("Varsayilan model (bossa gpt-5.5)"),
+      organization: z.string().optional().describe("OpenAI-Organization header degeri (opsiyonel)"),
+      description: z.string().optional().describe("Aciklama"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  async (args) => {
+    const data = await devkitApi("llm/provider/save", "POST", args);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_llm_provider_list",
+  {
+    title: "LLM Provider'lari Listele",
+    description: `Kayitli LLM provider profillerini listeler (API key gosterilmez, sadece var/yok).
+"llm providerlari listele", "tanimli llm hesaplari" dediginde CAGIR.`,
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async () => {
+    const data = await devkitApi("llm/provider/list", "GET");
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_llm_provider_remove",
+  {
+    title: "LLM Provider Sil",
+    description: `Kayitli bir LLM provider profilini siler.
+"llm provider sil", "llm hesabini kaldir" dediginde CAGIR.`,
+    inputSchema: {
+      name: z.string().min(1).describe("Silinecek provider adi"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ name }) => {
+    const data = await devkitApi("llm/provider/remove", "POST", { name });
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_llm_provider_test",
+  {
+    title: "LLM Provider/Key Testi",
+    description: `Bir LLM provider'in API key'ini ve erisimini test eder (kayitli providerName veya inline apiKey ile).
+"llm key test et", "openai baglantisini dene" dediginde CAGIR.`,
+    inputSchema: {
+      providerName: z.string().optional().describe("Kayitli provider adi"),
+      apiKey: z.string().optional().describe("Inline: API key"),
+      providerType: z.enum(["openai", "openai-compatible"]).optional(),
+      baseUrl: z.string().optional(),
+      organization: z.string().optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  },
+  async (args) => {
+    const data = await devkitApi("llm/provider/test", "POST", args);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+server.registerTool(
+  "devkit_llm_ask",
+  {
+    title: "Baska Bir LLM'e Sor (Bridge)",
+    description: `Kullanicinin kendi LLM hesabi uzerinden baska bir modele prompt veya baglam (soru, kod parcasi, alt-gorev) iletir ve cevabi geri doner.
+Kayitli hesap icin providerName ver; ya da inline apiKey + (opsiyonel) baseUrl/providerType ver.
+Tek-prompt icin 'prompt' (+ opsiyonel 'systemPrompt') kullan; tam kontrol icin 'messages' dizisini ver.
+"sunu gpt'ye sor", "bu kodu baska modele danis", "openai'a ilet", "ikinci bir model gorusu al" dediginde CAGIR.`,
+    inputSchema: {
+      prompt: z.string().optional().describe("Modele iletilecek soru/metin (messages verilmediyse)"),
+      systemPrompt: z.string().optional().describe("Opsiyonel system mesaji"),
+      messages: z.array(z.object({
+        role: z.enum(["system", "user", "assistant"]),
+        content: z.string(),
+      })).optional().describe("Tam kontrol icin mesaj dizisi (verilirse prompt/systemPrompt yok sayilir)"),
+      providerName: z.string().optional().describe("Kayitli LLM provider adi"),
+      model: z.string().optional().describe("Model adi (bossa provider varsayilani / gpt-5.5)"),
+      temperature: z.number().optional().describe("0-2 arasi"),
+      maxTokens: z.number().optional().describe("Maksimum cevap token sayisi"),
+      apiKey: z.string().optional().describe("Inline: API key (providerName yoksa)"),
+      providerType: z.enum(["openai", "openai-compatible"]).optional().describe("Inline: saglayici tipi"),
+      baseUrl: z.string().optional().describe("Inline: base URL (OpenAI-uyumlu servisler)"),
+      organization: z.string().optional().describe("Inline: OpenAI-Organization"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  async (args) => {
+    const data = await devkitApi("llm/ask", "POST", args);
+    return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+// ═══════════════════════════════════════════════
 // ENTRY POINT
 // ═══════════════════════════════════════════════
 

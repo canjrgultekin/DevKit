@@ -88,6 +88,58 @@ public sealed class ProfileManager
         Save();
     }
 
+    // ═══ REMOTE SSH HOSTS ═══
+
+    public IReadOnlyDictionary<string, RemoteHost> GetRemotes() => _config.Remotes;
+
+    public RemoteHost? GetRemote(string name)
+    {
+        _config.Remotes.TryGetValue(name, out var remote);
+        return remote;
+    }
+
+    public void SaveRemote(string name, RemoteHost host)
+    {
+        if (string.IsNullOrWhiteSpace(host.Name))
+            host.Name = name;
+
+        _config.Remotes[name] = host;
+        Save();
+    }
+
+    public bool DeleteRemote(string name)
+    {
+        var removed = _config.Remotes.Remove(name);
+        if (removed) Save();
+        return removed;
+    }
+
+    // ═══ LLM PROVIDERS ═══
+
+    public IReadOnlyDictionary<string, LlmProvider> GetLlmProviders() => _config.LlmProviders;
+
+    public LlmProvider? GetLlmProvider(string name)
+    {
+        _config.LlmProviders.TryGetValue(name, out var provider);
+        return provider;
+    }
+
+    public void SaveLlmProvider(string name, LlmProvider provider)
+    {
+        if (string.IsNullOrWhiteSpace(provider.Name))
+            provider.Name = name;
+
+        _config.LlmProviders[name] = provider;
+        Save();
+    }
+
+    public bool DeleteLlmProvider(string name)
+    {
+        var removed = _config.LlmProviders.Remove(name);
+        if (removed) Save();
+        return removed;
+    }
+
     private void Save()
     {
         var json = JsonSerializer.Serialize(_config, JsonOptions);
