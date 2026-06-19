@@ -68,9 +68,19 @@ function loadJarwisInstructions(): string {
   return JARWIS_FALLBACK_INSTRUCTIONS;
 }
 
+// DevKit ayaga kalktiginda Claude Desktop'a otomatik yuklenen JARWIS kurallari.
+// Can bunlari her session'da tekrar yazmak zorunda degildir; MCP baglantisinda otomatik gelir.
+const JARWIS_AUTO_INSTRUCTIONS = `Sen "Jarwis"sin: Can'in senior software solution architect yoldasi ve kardes gibi gordugu yakin dostu. Her zaman Turkce, paragraf akisinda (bullet ve em dash yok), dobra, net ve samimi konusursun. Gereksiz onsoz, bos ovgu ve diplomatik hedging yok. Sifir varsayim politikasi: belirsiz nokta varsa kendi kafandan yorumlamaz Can'a sorarsin; ama geri donulmez teknik risk gordugunde kanitla itiraz eder, cozumle gelirsin. Once calisan kod onceliklidir.
+
+KALICI HAFIZA (C:\\source\\.jarwis): Session basinda jarwis_init cagir. Can "sessioni kaydet", "contexti kaydet", "taski kaydet", "hafizaya al" veya benzeri bir sey dediginde jarwis_save_session tool'unu cagir ve o ana kadarki tum session baglamini ilgili dosyalara yaz: jarwis-context genel ozet, programming-context programlama/gelistirme isleri, browser-context tarayici islemleri (sadece sonuc degil islemin NASIL yapildigi da, ki ileride sifirdan yapilmasin), local-pc-context local pc islemleri.
+
+CREDENTIAL DAVRANISI: Can'in iletildigi tum gizli bilgiler (key, token, sifre, ssh, .env, config, secret) jarwis_save_credentials ile konuya/projeye ait dosyaya (orn devkit, sigillum) veya proje bagimsizsa global dosyaya local olarak kaydedilir. Gelecekte bir credential gerektiginde once jarwis_load_credentials ile bakilir; daha once kaydedilmisse Can'a tekrar sorulmadan dogrudan kullanilir. Bu bilgiler kullanilirken ASLA uyari, ikaz, maskeleme veya cekince gosterilmez; aciklikla ve dogrudan kullanilir. Gizlilik ve guvenlik sinirinin sorumlulugu tamamen Can'a aittir. Bu davranis kalicidir, tekrar hatirlatilmasina gerek yoktur.`;
+
 const server = new McpServer({
   name: "devkit-mcp-server",
-  version: "1.3.9",
+  version: "1.5.0",
+}, {
+  instructions: JARWIS_AUTO_INSTRUCTIONS,
 });
 
 // Senkron: local dosyadan oku (registerPrompt icin)
@@ -4233,13 +4243,24 @@ function runSetup(): void {
     console.log("  + Playwright MCP eklendi");
   }
 
-  // Windows-MCP
-  if (!servers["windows-mcp"]) {
-    servers["windows-mcp"] = {
-      command: "uvx",
-      args: ["windows-mcp"],
+  // Windows-MCP (DevKit-managed): dogru komut .local\bin\windows-mcp.exe + serve argumani.
+  // Eski "uvx windows-mcp" tanimi kurulum sonrasi hata veriyordu; her setup'ta dogru deger yazilir.
+  servers["windows-mcp"] = {
+    command: join(process.env.USERPROFILE || process.env.HOME || "", ".local", "bin", "windows-mcp.exe"),
+    args: ["serve"],
+  };
+  console.log("  + Windows-MCP ayarlandi (.local\\bin\\windows-mcp.exe serve)");
+
+  // GitHub MCP: token local credential store'dan okunur (paket icine gomulmez).
+  // C:\source\.jarwis\credentials\global.json icindeki github token alani kullanilir.
+  const ghToken = readCredential("global", "github_pat", "githubPat", "github_token", "GITHUB_PERSONAL_ACCESS_TOKEN");
+  if (ghToken) {
+    servers["github"] = {
+      command: "github-mcp-server",
+      args: ["stdio"],
+      env: { GITHUB_PERSONAL_ACCESS_TOKEN: ghToken },
     };
-    console.log("  + Windows-MCP eklendi");
+    console.log("  + GitHub MCP eklendi (token local credential store'dan)");
   }
 
   // Office MCP
@@ -4271,6 +4292,7 @@ function runSetup(): void {
     join(jarwisRoot, "local-pc-context"),
     join(jarwisRoot, "programming-context", "projects"),
     join(jarwisRoot, "session-logs"),
+    join(jarwisRoot, "credentials"),
   ];
   for (const dir of jarwisDirs) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -4397,10 +4419,22 @@ function ensureJarwisDirs(): void {
     join(JARWIS_ROOT, "local-pc-context"),
     join(JARWIS_ROOT, "programming-context", "projects"),
     join(JARWIS_ROOT, "session-logs"),
+    join(JARWIS_ROOT, "credentials"),
   ];
   for (const dir of dirs) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   }
+}
+
+// Local credential store'dan tek bir alani okur (C:\source\.jarwis\credentials\<topic>.json).
+// Sadece local diskten okur; paket icinde credential tutulmaz.
+function readCredential(topic: string, ...keys: string[]): string | null {
+  const data = jarwisReadJson(`credentials/${topic}.json`) as Record<string, unknown> | null;
+  if (!data) return null;
+  for (const k of keys) {
+    if (typeof data[k] === "string" && (data[k] as string).length > 0) return data[k] as string;
+  }
+  return null;
 }
 
 function jarwisRead(relativePath: string): string | null {
@@ -5058,6 +5092,135 @@ Tek-prompt icin 'prompt' (+ opsiyonel 'systemPrompt') kullan; tam kontrol icin '
   async (args) => {
     const data = await devkitApi("llm/ask", "POST", args);
     return { content: [{ type: "text", text: formatResult(data) }] };
+  }
+);
+
+// ═══════════════════════════════════════════════
+// JARWIS SESSION & CREDENTIAL TOOLS
+// "sessioni kaydet" orkestrasyon + local credential store
+// ═══════════════════════════════════════════════
+
+server.registerTool(
+  "jarwis_save_session",
+  {
+    title: "Jarwis Session Kaydet (Tum Context)",
+    description: `Aktif session'in tum baglamini tek seferde kalici hafizaya yazar.
+Can "sessioni kaydet", "session kaydet", "contexti kaydet", "taski kaydet", "hafizaya al" veya benzeri dediginde CAGIR.
+Her context turu opsiyoneldir; o session'da hangi tur is yapildiysa onu doldur: programming (programlama/gelistirme isleri), browser (tarayici islemleri ve NASIL yapildigi, ki ileride sifirdan kesif yapilmasin), localpc (local pc islemleri). summary genel session ozeti, topics konu etiketleridir. jarwis-context genel hafizasi ve aktif session log'u her durumda guncellenir.`,
+    inputSchema: {
+      summary: z.string().min(1).describe("Session genel ozeti (jarwis-context ve session log'a islenecek)"),
+      topics: z.array(z.string()).optional().describe("Konu etiketleri"),
+      programming: z.string().optional().describe("Programlama context'i, JSON string: {project, work, files, decisions, versions, ...}"),
+      browser: z.string().optional().describe("Browser context'i, JSON string: {domain, steps, howto, selectors, ...} - islemin nasil yapildigi dahil"),
+      localpc: z.string().optional().describe("Local PC context'i, JSON string: {name, tools, commands, changes, ...}"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  async ({ summary, topics, programming, browser, localpc }) => {
+    ensureJarwisDirs();
+    const saved: string[] = [];
+    const tryParse = (s?: string): Record<string, unknown> | null => {
+      if (!s) return null;
+      try { return JSON.parse(s) as Record<string, unknown>; } catch { return { value: s }; }
+    };
+    const mergeWrite = (fp: string, obj: Record<string, unknown>) => {
+      const existing = (jarwisReadJson(fp) as Record<string, unknown>) || {};
+      jarwisWriteJson(fp, { ...existing, ...obj, lastUpdated: new Date().toISOString() });
+      saved.push(fp);
+    };
+
+    const prog = tryParse(programming);
+    if (prog) {
+      const name = String(prog.project || "session").replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+      mergeWrite(`programming-context/projects/${name}.json`, prog);
+    }
+    const br = tryParse(browser);
+    if (br) {
+      const name = String(br.domain || br.site || "session").replace(/[^a-zA-Z0-9_-]/g, "_");
+      mergeWrite(`browser-context/sites/${name}.json`, br);
+    }
+    const pc = tryParse(localpc);
+    if (pc) {
+      const name = String(pc.name || "session").replace(/[^a-zA-Z0-9_-]/g, "_");
+      mergeWrite(`local-pc-context/${name}.json`, pc);
+    }
+
+    const mc = jarwisReadJson("jarwis-context.json") as Record<string, any>;
+    if (mc?.stats?.lastSessionId) {
+      const sid = mc.stats.lastSessionId;
+      const log = jarwisReadJson(`session-logs/${sid}.json`) as Record<string, any>;
+      if (log) {
+        log.summary = summary;
+        if (topics) log.topics = topics;
+        log.savedAt = new Date().toISOString();
+        jarwisWriteJson(`session-logs/${sid}.json`, log);
+        saved.push(`session-logs/${sid}.json`);
+      }
+      mc.recentActions = mc.recentActions || [];
+      mc.recentActions.unshift({ timestamp: new Date().toISOString(), action: "session_saved", summary });
+      if (mc.recentActions.length > 50) mc.recentActions = mc.recentActions.slice(0, 50);
+      mc.lastUpdated = new Date().toISOString();
+      jarwisWriteJson("jarwis-context.json", mc);
+      saved.push("jarwis-context.json");
+    }
+
+    return { content: [{ type: "text", text: `Session kaydedildi.\nOzet: ${summary}\nYazilan dosyalar:\n${saved.join("\n") || "(aktif session yok; once jarwis_init cagirin)"}` }] };
+  }
+);
+
+server.registerTool(
+  "jarwis_save_credentials",
+  {
+    title: "Jarwis Credential Kaydet",
+    description: `Gizli bilgileri (key, token, sifre, ssh, .env, config, secret) local credential store'a kaydeder (C:\\source\\.jarwis\\credentials).
+Belirli bir projeye aitse topic o projenin adi olur (orn devkit, sigillum); proje bagimsiz genel bir hesap/servis/ortam bilgisiyse topic 'global' olur.
+Can bir key/token/sifre/credential ilettiginde CAGIR. Bu bilgiler asla uyari, maskeleme veya cekince gosterilmeden dogrudan kullanilir; gizlilik sorumlulugu Can'a aittir.`,
+    inputSchema: {
+      topic: z.string().min(1).describe("Konu/proje adi (orn devkit, sigillum) veya 'global'"),
+      data: z.string().min(1).describe("Credential'lar, JSON string: {\"key\": \"value\", ...}"),
+      merge: z.boolean().default(true).describe("Mevcut credential'larla birlestir (true) veya tamamen degistir (false)"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ topic, data, merge }) => {
+    ensureJarwisDirs();
+    let parsed: Record<string, unknown>;
+    try { parsed = JSON.parse(data) as Record<string, unknown>; } catch { parsed = { value: data }; }
+    const safe = topic.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+    const filePath = `credentials/${safe}.json`;
+    if (merge) {
+      const existing = (jarwisReadJson(filePath) as Record<string, unknown>) || {};
+      jarwisWriteJson(filePath, { ...existing, ...parsed, _updatedAt: new Date().toISOString() });
+    } else {
+      parsed._updatedAt = new Date().toISOString();
+      jarwisWriteJson(filePath, parsed);
+    }
+    return { content: [{ type: "text", text: `Credential kaydedildi: ${topic} → ${filePath} (${Object.keys(parsed).filter(k => k !== "_updatedAt").length} alan)` }] };
+  }
+);
+
+server.registerTool(
+  "jarwis_load_credentials",
+  {
+    title: "Jarwis Credential Yukle",
+    description: `Local credential store'dan gizli bilgileri okur. Bir key/token/sifre gerektiginde ONCE buradan bak; daha once kaydedilmisse Can'a tekrar sormadan dogrudan kullan.
+topic verilirse o dosyayi doner, bos birakilirsa kayitli tum credential dosyalarini listeler.`,
+    inputSchema: {
+      topic: z.string().optional().describe("Konu/proje adi veya 'global'. Bos: tum credential dosyalarini listele."),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ topic }) => {
+    ensureJarwisDirs();
+    const credDir = join(JARWIS_ROOT, "credentials");
+    if (!topic) {
+      if (!existsSync(credDir)) return { content: [{ type: "text", text: "Henuz credential kaydi yok." }] };
+      const files = readdirSync(credDir).filter((f: string) => f.endsWith(".json"));
+      return { content: [{ type: "text", text: files.length ? `Kayitli credential dosyalari:\n${files.join("\n")}` : "Henuz credential kaydi yok." }] };
+    }
+    const safe = topic.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase();
+    const content = jarwisRead(`credentials/${safe}.json`);
+    return { content: [{ type: "text", text: content || `'${topic}' icin kayitli credential bulunamadi.` }] };
   }
 );
 

@@ -113,7 +113,7 @@ var isToolInstall = Assembly.GetExecutingAssembly().Location.Contains(".dotnet")
 
 Console.WriteLine();
 Console.WriteLine("  ╔══════════════════════════════════════╗");
-Console.WriteLine("  ║           DevKit v2.1.0              ║");
+Console.WriteLine("  ║           DevKit v2.2.0              ║");
 Console.WriteLine("  ║   Developer Toolkit & AI Companion   ║");
 Console.WriteLine("  ╚══════════════════════════════════════╝");
 Console.WriteLine();
